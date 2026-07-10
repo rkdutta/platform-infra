@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+  # Keep the app around until child resources (incl. CRDs) are cleaned up.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Multi-source: pull the chart from the Helm repo, but read the values file
+  # from THIS git repo (referenced below via $values). This is the declarative
+  # equivalent of:
+  #   helm install grafana-stack prometheus-community/kube-prometheus-stack \
+  #     --namespace monitoring --values grafana-stack-values.yaml
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 87.10.1
+      helm:
+        releaseName: monitoring-stack
+        valueFiles:
+          - $values/apps/monitoring/monitoring-stack/monitoring-stack-values.yaml
+
+    - repoURL: https://github.com/rkdutta/platform-infra.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Equivalent of `helm install --namespace monitoring` creating the ns.
+      - CreateNamespace=true
+      # kube-prometheus-stack ships very large CRDs; server-side apply avoids
+      # the "metadata.annotations: Too long" client-side apply error.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
