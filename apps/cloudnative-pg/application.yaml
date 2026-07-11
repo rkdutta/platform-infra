@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudnative-pg
+  namespace: argocd
+  # Deploy before anything that creates a CNPG Cluster (keycloak-db). Sync waves
+  # order children when this repo is driven by an app-of-apps; standalone, ArgoCD
+  # retries converge the Cluster once these CRDs exist.
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Built-in `default` project (platform-infra AppProject does not exist yet).
+  project: default
+
+  # Declarative equivalent of:
+  #   helm repo add cnpg https://cloudnative-pg.github.io/charts
+  #   helm upgrade --install cnpg cnpg/cloudnative-pg -n cnpg-system --create-namespace
+  # Installs the CloudNativePG operator + its CRDs (Cluster, etc.).
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: cloudnative-pg
+    targetRevision: 0.29.0   # operator appVersion 1.30.0
+    helm:
+      releaseName: cnpg
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # CNPG ships CRDs; server-side apply avoids the
+      # "metadata.annotations: Too long" client-side apply error.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

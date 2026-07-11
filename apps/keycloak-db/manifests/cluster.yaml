@@ -1,0 +1,25 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+spec:
+  # 1 primary + 1 hot-standby = actual HA. Drop to 1 on a small/single-node
+  # cluster, or raise to 3 for quorum-based failover.
+  instances: 2
+
+  # Image is omitted on purpose so the operator uses its tested default
+  # PostgreSQL image. Pin `imageName:` here if you need a specific version.
+
+  storage:
+    size: 5Gi
+    # storageClass: ""   # uses the cluster default StorageClass
+
+  bootstrap:
+    initdb:
+      database: keycloak   # DB Keycloak connects to
+      owner: keycloak      # app user; CNPG generates secret `keycloak-db-app`
+                           # (keys: username, password, host, port, dbname, ...)
+
+  # Read-write endpoint is the Service `keycloak-db-rw` (port 5432) — that's what
+  # Keycloak points at. A `keycloak-db-ro` Service fronts the replicas.
