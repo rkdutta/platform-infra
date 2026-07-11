@@ -41,6 +41,15 @@ spec:
           falcosidekick:
             enabled: true
 
+          # Falco config (this whole map is written into /etc/falco/falco.yaml).
+          falco:
+            # Fixes "Error: could not initialize inotify handler" on nodes with
+            # low fs.inotify.max_user_instances (kind/k3s/minikube). This turns
+            # off rules/config hot-reload; Falco reloads rules on pod restart,
+            # which is fine under GitOps (ArgoCD restarts on ConfigMap change if
+            # you add a checksum annotation, or just rollout-restart the ds).
+            watch_config_files: false
+
           # Mount our ConfigMap into /etc/falco/rules.d, which Falco already
           # loads by default — so the rule is picked up with no customRules
           # inlined here. Keys in the ConfigMap become *.yaml files in rules.d.

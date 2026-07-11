@@ -6,31 +6,31 @@
 # ArgoCD reads only what's inlined under source.helm.values in application.yaml,
 # so keep this file in sync with the customRules block there.
 
-# - rule: Detect Root User In Container
-#   desc: >
-#     A process was spawned as the root user (uid 0) inside a container.
-#     Running as root widens the blast radius of a container escape, so flag it.
-#   condition: >
-#     spawned_process and container and user.uid = 0
-#   output: >
-#     Process running as root in container
-#     (user=%user.name uid=%user.uid command=%proc.cmdline
-#      container=%container.name image=%container.image.repository:%container.image.tag
-#      pod=%k8s.pod.name ns=%k8s.ns.name)
-#   priority: WARNING
-#   tags: [process, container, root, mitre_privilege_escalation]
+- rule: Detect Root User In Container
+  desc: >
+    A process was spawned as the root user (uid 0) inside a container.
+    Running as root widens the blast radius of a container escape, so flag it.
+  condition: >
+    spawned_process and container and user.uid = 0
+  output: >
+    Process running as root in container
+    (user=%user.name uid=%user.uid command=%proc.cmdline
+     container=%container.name image=%container.image.repository:%container.image.tag
+     pod=%k8s.pod.name ns=%k8s.ns.name)
+  priority: WARNING
+  tags: [process, container, root, mitre_privilege_escalation]
 
-# - rule: Detect Privilege Escalation To Root
-#   desc: >
-#     A non-root process transitioned to root (setuid to uid 0), e.g. via sudo/su
-#     or a setuid binary. Often a sign of privilege escalation.
-#   condition: >
-#     evt.type in (setuid, setresuid) and evt.dir = < and container
-#     and evt.arg.uid = 0 and user.uid != 0
-#   output: >
-#     Privilege escalation to root detected
-#     (from_uid=%user.uid to_uid=0 command=%proc.cmdline
-#      container=%container.name image=%container.image.repository
-#      pod=%k8s.pod.name ns=%k8s.ns.name)
-#   priority: CRITICAL
-#   tags: [process, container, root, mitre_privilege_escalation]
+- rule: Detect Privilege Escalation To Root
+  desc: >
+    A non-root process transitioned to root (setuid to uid 0), e.g. via sudo/su
+    or a setuid binary. Often a sign of privilege escalation.
+  condition: >
+    evt.type in (setuid, setresuid) and evt.dir = < and container
+    and evt.arg.uid = 0 and user.uid != 0
+  output: >
+    Privilege escalation to root detected
+    (from_uid=%user.uid to_uid=0 command=%proc.cmdline
+     container=%container.name image=%container.image.repository
+     pod=%k8s.pod.name ns=%k8s.ns.name)
+  priority: CRITICAL
+  tags: [process, container, root, mitre_privilege_escalation]
