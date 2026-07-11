@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gatekeeper
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Using the built-in `default` project. Switch to `platform-infra` only after
+  # you have created that AppProject in the cluster.
+  project: default
+
+  # ArgoCD sources must be a git repo or a Helm/OCI chart — NOT a raw manifest
+  # URL. Gatekeeper's official Helm chart is the declarative equivalent of:
+  #   kubectl apply -f .../gatekeeper/release-3.14/deploy/gatekeeper.yaml
+  source:
+    repoURL: https://open-policy-agent.github.io/gatekeeper/charts
+    chart: gatekeeper
+    targetRevision: 3.14.2   # matches release-3.14
+    helm:
+      releaseName: gatekeeper
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gatekeeper-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Gatekeeper ships large CRDs; server-side apply avoids the
+      # "metadata.annotations: Too long" client-side apply error.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

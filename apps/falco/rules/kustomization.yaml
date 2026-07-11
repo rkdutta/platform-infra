@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Build a ConfigMap straight from the rule file — no copy/paste of rule content
+# into a manifest. Each file becomes a key: data["root-detect-rule.yaml"].
+namespace: falco-system
+
+configMapGenerator:
+  - name: falco-custom-rules
+    files:
+      - root-detect-rule.yaml
+
+generatorOptions:
+  # Keep a stable name so the Falco chart's volume can reference it. (With the
+  # hash suffix enabled the name would change on every edit and break the ref.)
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: falco
