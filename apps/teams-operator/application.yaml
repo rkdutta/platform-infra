@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: teams-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Built-in `default` project (no dedicated AppProject exists yet).
+  project: default
+
+  # RBAC + Deployment live in git. `path` points at the manifests/ subdir so
+  # this Application manifest itself is NOT rendered as a cluster resource.
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/teams-operator/manifests
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: teams-operator
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

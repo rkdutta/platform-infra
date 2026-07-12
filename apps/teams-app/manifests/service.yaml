@@ -1,0 +1,18 @@
+# ClusterIP fronting the teams-app nginx pods; the Ingress routes to it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: teams-app-service
+  namespace: teams-app
+  labels:
+    app: teams-app
+    component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: teams-app
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 80

@@ -1,0 +1,60 @@
+# Teams Operator — polls the Teams API and reconciles a namespace per team.
+# Image is served from the kind local registry (localhost:5001 -> kind-registry).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teams-operator
+  namespace: teams-operator
+  labels:
+    app: teams-operator
+spec:
+  replicas: 1  # single reconciler; no leader election
+  selector:
+    matchLabels:
+      app: teams-operator
+  template:
+    metadata:
+      labels:
+        app: teams-operator
+    spec:
+      serviceAccountName: teams-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: teams-operator
+        image: localhost:5001/teams-operator:0.1.0
+        imagePullPolicy: IfNotPresent
+        env:
+        # teams-api Service lives in the teams-api namespace, port 8000.
+        - name: TEAMS_API_URL
+          value: "http://teams-api-service.teams-api.svc.cluster.local:8000"
+        - name: POLL_INTERVAL
+          value: "30"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          exec:
+            command: ["python", "-c", "import sys; sys.exit(0)"]
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command: ["python", "-c", "import sys; sys.exit(0)"]
+          initialDelaySeconds: 5
+          periodSeconds: 10

@@ -1,0 +1,33 @@
+# Identity + cluster permissions for the operator. It watches teams from the
+# Teams API and creates/deletes a namespace per team, so it needs cluster-wide
+# namespace management (plus event emission).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: teams-operator
+  namespace: teams-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: teams-operator
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: teams-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: teams-operator
+subjects:
+- kind: ServiceAccount
+  name: teams-operator
+  namespace: teams-operator

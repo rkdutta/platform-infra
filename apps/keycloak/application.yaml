@@ -60,6 +60,133 @@ spec:
           - name: KC_BOOTSTRAP_ADMIN_PASSWORD
             value: changeme
 
+        # Expose Keycloak to the browser via ingress-nginx at
+        # http://platform-auth.127.0.0.1.sslip.io:8080/auth (host :8080 -> :80).
+        # KC serves under /auth (KC_HTTP_RELATIVE_PATH); the `/` prefix covers it
+        # and forwards the Host header (incl. :8080) so KC builds correct URLs
+        # (KC_PROXY_HEADERS=forwarded means it ignores nginx's X-Forwarded-*).
+        ingress:
+          enabled: true
+          ingressClassName: nginx
+          rules:
+            - host: platform-auth.127.0.0.1.sslip.io
+              paths:
+                - path: /
+                  pathType: Prefix
+
+        # --- Realm import ---------------------------------------------------
+        # Mount the exported "teams" realm so `kc.sh start --import-realm`
+        # (above) creates it on first boot. The ConfigMap below is the inline
+        # copy ArgoCD actually renders; keep it in sync with the reference file
+        # apps/keycloak/teams-realm.json.
+        extraManifests:
+          - apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: keycloak-realm-import
+            data:
+              teams-realm.json: |
+                {
+                  "realm": "teams",
+                  "enabled": true,
+                  "sslRequired": "none",
+                  "registrationAllowed": false,
+                  "resetPasswordAllowed": true,
+                  "editUsernameAllowed": false,
+                  "bruteForceProtected": true,
+                  "clients": [
+                    {
+                      "clientId": "teams-ui",
+                      "name": "Teams UI",
+                      "description": "Angular Teams Management UI",
+                      "enabled": true,
+                      "clientAuthenticatorType": "client-secret",
+                      "redirectUris": [
+                        "http://teams-ui.127.0.0.1.sslip.io:8080/*",
+                        "http://platform-auth.127.0.0.1.sslip.io/*",
+                        "http://engineering-platform.local/*",
+                        "http://localhost:4200/*",
+                        "http://localhost:4201/*",
+                        "http://rdutta.coder/*"
+                      ],
+                      "webOrigins": [
+                        "http://teams-ui.127.0.0.1.sslip.io:8080",
+                        "http://platform-auth.127.0.0.1.sslip.io",
+                        "http://engineering-platform.local",
+                        "http://localhost:4200",
+                        "http://localhost:4201",
+                        "http://rdutta.coder:4200"
+                      ],
+                      "publicClient": true,
+                      "protocol": "openid-connect",
+                      "attributes": {
+                        "post.logout.redirect.uris": "http://teams-ui.127.0.0.1.sslip.io:8080/*##http://platform-auth.127.0.0.1.sslip.io/*##http://localhost:4200/*##http://localhost:4201/*##http://rdutta.coder:*"
+                      }
+                    }
+                  ],
+                  "users": [
+                    {
+                      "username": "teamlead1",
+                      "enabled": true,
+                      "firstName": "Team",
+                      "lastName": "Lead",
+                      "email": "teamlead1@company.com",
+                      "emailVerified": true,
+                      "credentials": [
+                        {
+                          "type": "password",
+                          "value": "password123",
+                          "temporary": false
+                        }
+                      ],
+                      "realmRoles": [
+                        "team-leader"
+                      ]
+                    },
+                    {
+                      "username": "admin",
+                      "enabled": true,
+                      "firstName": "Admin",
+                      "lastName": "User",
+                      "email": "admin@company.com",
+                      "emailVerified": true,
+                      "credentials": [
+                        {
+                          "type": "password",
+                          "value": "admin123",
+                          "temporary": false
+                        }
+                      ],
+                      "realmRoles": [
+                        "admin",
+                        "team-leader"
+                      ]
+                    }
+                  ],
+                  "roles": {
+                    "realm": [
+                      {
+                        "name": "team-leader",
+                        "description": "Can create and manage teams"
+                      },
+                      {
+                        "name": "admin",
+                        "description": "Full administrative access"
+                      }
+                    ]
+                  }
+                }
+
+        extraVolumes: |
+          - name: realm-import
+            configMap:
+              name: keycloak-realm-import
+
+        extraVolumeMounts: |
+          - name: realm-import
+            mountPath: /opt/keycloak/data/import
+            readOnly: true
+
   destination:
     server: https://kubernetes.default.svc
     namespace: keycloak

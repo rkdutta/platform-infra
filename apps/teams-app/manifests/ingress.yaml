@@ -1,0 +1,24 @@
+# Serves the SPA at http://teams-ui.127.0.0.1.sslip.io:8080 (host :8080 maps to
+# the cluster's ingress :80). This host must match the browser origin allowed by
+# the Keycloak `teams-ui` client (redirectUris / webOrigins in teams-realm.json).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: teams-app-ingress
+  namespace: teams-app
+  annotations:
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: teams-ui.127.0.0.1.sslip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: teams-app-service
+            port:
+              number: 80
