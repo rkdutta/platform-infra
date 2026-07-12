@@ -5,7 +5,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: teams-api
-  namespace: teams-api
+  namespace: engineering-platform
   labels:
     app: teams-api
     component: backend

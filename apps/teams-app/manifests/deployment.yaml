@@ -1,14 +1,15 @@
-# Teams UI — Angular SPA served by nginx. The browser-facing API and Keycloak
-# URLs are baked into the JS bundle at build time (see Dockerfile.compose args):
-#   API_URL      = http://teams-api.127.0.0.1.sslip.io:8080
-#   KEYCLOAK_URL = http://platform-auth.127.0.0.1.sslip.io:8080/auth
+# Teams UI — Angular SPA served by nginx (see teams-app/Dockerfile.k8s).
+# Baked into the JS bundle at build time:
+#   API_URL      = /api  -> nginx reverse-proxies to teams-api-service:8000
+#                          (same namespace), so API traffic stays in-cluster.
+#   KEYCLOAK_URL = http://platform-auth.127.0.0.1.sslip.io:8080/auth (browser).
 # Rebuild + bump the tag to change them. Image is served from the kind local
 # registry (localhost:5001 -> kind-registry).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: teams-app
-  namespace: teams-app
+  namespace: engineering-platform
   labels:
     app: teams-app
     component: frontend
@@ -25,7 +26,7 @@ spec:
     spec:
       containers:
       - name: teams-app
-        image: localhost:5001/teams-app:0.1.0
+        image: localhost:5001/teams-app:0.2.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80

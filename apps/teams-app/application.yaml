@@ -21,7 +21,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: teams-app
+    namespace: engineering-platform
 
   syncPolicy:
     automated:

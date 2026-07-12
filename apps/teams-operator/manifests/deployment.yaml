@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: teams-operator
-  namespace: teams-operator
+  namespace: engineering-platform
   labels:
     app: teams-operator
 spec:
@@ -30,9 +30,9 @@ spec:
         image: localhost:5001/teams-operator:0.1.0
         imagePullPolicy: IfNotPresent
         env:
-        # teams-api Service lives in the teams-api namespace, port 8000.
+        # teams-api Service, same (engineering-platform) namespace, port 8000.
         - name: TEAMS_API_URL
-          value: "http://teams-api-service.teams-api.svc.cluster.local:8000"
+          value: "http://teams-api-service.engineering-platform.svc.cluster.local:8000"
         - name: POLL_INTERVAL
           value: "30"
         securityContext:
