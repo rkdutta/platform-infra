@@ -1,0 +1,19 @@
+# ClusterIP fronting the teams-api pods. Exposes port 8000 (same as the
+# container) so in-cluster clients reach it at http://teams-api-service:8000.
+apiVersion: v1
+kind: Service
+metadata:
+  name: teams-api-service
+  namespace: teams-api
+  labels:
+    app: teams-api
+    component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: teams-api
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8000
+    targetPort: 8000

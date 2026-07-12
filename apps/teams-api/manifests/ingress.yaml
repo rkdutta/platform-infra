@@ -1,0 +1,30 @@
+# External access via ingress-nginx at http://teams-api.127.0.0.1.sslip.io:8080
+# (host port 8080 maps to the cluster's :80).
+#
+# NOTE: this routes only once an ingress controller (ingress-nginx) is installed
+# in the cluster. The kind node is already labeled ingress-ready and host ports
+# 8080/8443 are mapped, but no controller is deployed yet. Until then, reach the
+# API with: kubectl -n teams-api port-forward svc/teams-api-service 8000:8000
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: teams-api-ingress
+  namespace: teams-api
+  annotations:
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization, X-Requested-With"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: teams-api.127.0.0.1.sslip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: teams-api-service
+            port:
+              number: 8000

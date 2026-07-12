@@ -1,0 +1,65 @@
+# Teams API — FastAPI backend (in-memory team store).
+# Image is served from the kind local registry (localhost:5001 on the host,
+# resolved in-cluster via the containerd mirror -> http://kind-registry:5000).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teams-api
+  namespace: teams-api
+  labels:
+    app: teams-api
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: teams-api
+  template:
+    metadata:
+      labels:
+        app: teams-api
+        component: backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: teams-api
+        image: localhost:5001/teams-api:0.1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8000"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
