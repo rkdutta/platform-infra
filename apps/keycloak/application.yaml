@@ -41,9 +41,16 @@ spec:
         command:
           - "/opt/keycloak/bin/kc.sh"
           - "start"
-          - "--http-enabled=true"      # no TLS inside the cluster yet
+          - "--http-enabled=true"      # nginx terminates TLS; KC stays HTTP internally
           - "--http-port=8080"
-          - "--hostname-strict=false"  # no fixed external hostname yet
+          # Fixed https frontend URL — full URL form (scheme + host + PORT + path).
+          # Browsers require a secure (https) context for the keycloak-js SSO flow
+          # (Storage Access API / cross-site cookies), so the UI is served over TLS
+          # at :8443 via ingress-nginx. Both the :8443 port and the /auth path MUST
+          # be present or keycloak-js token validation (iss claim) fails. The
+          # explicit :8443 is required because nginx forwards X-Forwarded-Port=443
+          # (its internal port), so KC can't infer the external port on its own.
+          - "--hostname=https://platform-auth.127.0.0.1.sslip.io:8443/auth"
           - "--health-enabled=true"    # serves /auth/health on mgmt port 9000
           - "--metrics-enabled=true"   #   (chart's liveness/readiness probes)
           - "--import-realm"
@@ -51,6 +58,12 @@ spec:
           - "--spi-login-protocol-openid-connect-cors-allowed-origins=*"
           - "--spi-login-protocol-openid-connect-cors-allowed-methods=GET,POST,OPTIONS,PUT,DELETE"
           - "--spi-login-protocol-openid-connect-cors-allowed-headers=*"
+
+        # nginx sends X-Forwarded-* (not RFC-7239 Forwarded), so tell Keycloak to
+        # trust those headers — otherwise it sees the internal HTTP hop and would
+        # emit http:// URLs / non-Secure cookies. (Chart default mode: forwarded.)
+        proxy:
+          mode: xforwarded
 
         # Bootstrap admin (Keycloak 26 env names). CHANGE THESE before real use
         # and ideally move them into a Secret / sealed-secret rather than git.
@@ -60,11 +73,11 @@ spec:
           - name: KC_BOOTSTRAP_ADMIN_PASSWORD
             value: changeme
 
-        # Expose Keycloak to the browser via ingress-nginx at
-        # http://platform-auth.127.0.0.1.sslip.io:8080/auth (host :8080 -> :80).
-        # KC serves under /auth (KC_HTTP_RELATIVE_PATH); the `/` prefix covers it
-        # and forwards the Host header (incl. :8080) so KC builds correct URLs
-        # (KC_PROXY_HEADERS=forwarded means it ignores nginx's X-Forwarded-*).
+        # Expose Keycloak to the browser via ingress-nginx over TLS at
+        # https://platform-auth.127.0.0.1.sslip.io:8443/auth (host :8443 -> :443).
+        # nginx terminates TLS using the platform-tls secret (self-signed
+        # wildcard *.127.0.0.1.sslip.io) and proxies HTTP to KC. KC serves under
+        # /auth (KC_HTTP_RELATIVE_PATH); the `/` prefix covers it.
         ingress:
           enabled: true
           ingressClassName: nginx
@@ -73,6 +86,10 @@ spec:
               paths:
                 - path: /
                   pathType: Prefix
+          tls:
+            - hosts:
+                - platform-auth.127.0.0.1.sslip.io
+              secretName: platform-tls
 
         # --- Realm import ---------------------------------------------------
         # Mount the exported "teams" realm so `kc.sh start --import-realm`
@@ -102,6 +119,7 @@ spec:
                       "enabled": true,
                       "clientAuthenticatorType": "client-secret",
                       "redirectUris": [
+                        "https://teams-ui.127.0.0.1.sslip.io:8443/*",
                         "http://teams-ui.127.0.0.1.sslip.io:8080/*",
                         "http://platform-auth.127.0.0.1.sslip.io/*",
                         "http://engineering-platform.local/*",
@@ -110,6 +128,7 @@ spec:
                         "http://rdutta.coder/*"
                       ],
                       "webOrigins": [
+                        "https://teams-ui.127.0.0.1.sslip.io:8443",
                         "http://teams-ui.127.0.0.1.sslip.io:8080",
                         "http://platform-auth.127.0.0.1.sslip.io",
                         "http://engineering-platform.local",
@@ -120,7 +139,7 @@ spec:
                       "publicClient": true,
                       "protocol": "openid-connect",
                       "attributes": {
-                        "post.logout.redirect.uris": "http://teams-ui.127.0.0.1.sslip.io:8080/*##http://platform-auth.127.0.0.1.sslip.io/*##http://localhost:4200/*##http://localhost:4201/*##http://rdutta.coder:*"
+                        "post.logout.redirect.uris": "https://teams-ui.127.0.0.1.sslip.io:8443/*##http://teams-ui.127.0.0.1.sslip.io:8080/*##http://platform-auth.127.0.0.1.sslip.io/*##http://localhost:4200/*##http://localhost:4201/*##http://rdutta.coder:*"
                       }
                     }
                   ],

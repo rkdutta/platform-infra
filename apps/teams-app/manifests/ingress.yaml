@@ -1,16 +1,19 @@
-# Serves the SPA at http://teams-ui.127.0.0.1.sslip.io:8080 (host :8080 maps to
-# the cluster's ingress :80). This host must match the browser origin allowed by
-# the Keycloak `teams-ui` client (redirectUris / webOrigins in teams-realm.json).
+# Serves the SPA over TLS at https://teams-ui.127.0.0.1.sslip.io:8443 (host :8443
+# maps to the cluster's ingress :443). HTTPS is required: keycloak-js's SSO flow
+# only works in a secure browser context. This host must match the browser
+# origin allowed by the Keycloak `teams-ui` client (redirectUris / webOrigins).
+# nginx terminates TLS with the self-signed wildcard secret `platform-tls`.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: teams-app-ingress
   namespace: engineering-platform
-  annotations:
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - teams-ui.127.0.0.1.sslip.io
+    secretName: platform-tls
   rules:
   - host: teams-ui.127.0.0.1.sslip.io
     http:

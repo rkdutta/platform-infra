@@ -14,6 +14,7 @@
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
+        "https://teams-ui.127.0.0.1.sslip.io:8443/*",
         "http://teams-ui.127.0.0.1.sslip.io:8080/*",
         "http://platform-auth.127.0.0.1.sslip.io/*",
         "http://engineering-platform.local/*",
@@ -22,6 +23,7 @@
         "http://rdutta.coder/*"
       ],
       "webOrigins": [
+        "https://teams-ui.127.0.0.1.sslip.io:8443",
         "http://teams-ui.127.0.0.1.sslip.io:8080",
         "http://platform-auth.127.0.0.1.sslip.io",
         "http://engineering-platform.local",
@@ -32,7 +34,7 @@
       "publicClient": true,
       "protocol": "openid-connect",
       "attributes": {
-        "post.logout.redirect.uris": "http://teams-ui.127.0.0.1.sslip.io:8080/*##http://platform-auth.127.0.0.1.sslip.io/*##http://localhost:4200/*##http://localhost:4201/*##http://rdutta.coder:*"
+        "post.logout.redirect.uris": "https://teams-ui.127.0.0.1.sslip.io:8443/*##http://teams-ui.127.0.0.1.sslip.io:8080/*##http://platform-auth.127.0.0.1.sslip.io/*##http://localhost:4200/*##http://localhost:4201/*##http://rdutta.coder:*"
       }
     }
   ],
