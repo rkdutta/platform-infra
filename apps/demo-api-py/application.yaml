@@ -1,25 +1,26 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: teams-api
+  name: demo-api-py
   namespace: argocd
+  # Wave 1: after ingress-nginx (0); the Argo Rollouts controller is present.
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  # Built-in `default` project (no dedicated AppProject exists yet).
   project: default
 
-  # Deployment/Service/Ingress live in git. `path` points at the manifests/
-  # subdir so this Application manifest itself is NOT rendered as a resource.
-  # The container image is pulled separately from the kind local registry.
+  # App code + deploy manifests live in the demo-api-py repo; the image is
+  # pulled from the kind local registry (localhost:5001/demo-api-py).
   source:
-    repoURL: https://github.com/rkdutta/platform-infra.git
+    repoURL: https://github.com/rkdutta/demo-api-py.git
     targetRevision: main
-    path: apps/idp/teams-api/manifests
+    path: deploy
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: engineering-platform
+    namespace: demo-py
 
   syncPolicy:
     automated:

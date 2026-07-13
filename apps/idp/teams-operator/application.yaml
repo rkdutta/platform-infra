@@ -14,7 +14,7 @@ spec:
   source:
     repoURL: https://github.com/rkdutta/platform-infra.git
     targetRevision: main
-    path: apps/teams-operator/manifests
+    path: apps/idp/teams-operator/manifests
 
   destination:
     server: https://kubernetes.default.svc
