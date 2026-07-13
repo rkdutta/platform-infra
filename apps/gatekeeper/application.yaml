@@ -3,6 +3,14 @@ kind: Application
 metadata:
   name: gatekeeper
   namespace: argocd
+  annotations:
+    # ServerSideApply (below) applies these CRDs server-side, so the live CRDs
+    # carry no `last-applied-configuration` annotation. ArgoCD's default
+    # client-side diff needs that annotation and otherwise reports gatekeeper's
+    # huge auto-generated CRD schemas as permanently OutOfSync (a phantom diff —
+    # `kubectl diff` shows no change). ServerSideDiff makes the diff use the
+    # same server-side dry-run as the apply, eliminating the false drift.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
