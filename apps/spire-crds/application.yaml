@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: spire-crds
+  namespace: argocd
+  # Must be Synced/Healthy BEFORE the `spire` app: the spire chart renders
+  # ClusterSPIFFEID / ClusterFederatedTrustDomain custom resources that fail to
+  # apply until these CRDs exist. Apply this app first (there is no app-of-apps
+  # here, so wave numbers don't order the two apps on their own).
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    # CRD schemas are applied server-side; make the diff server-side too so the
+    # large auto-generated schemas don't show as permanent phantom drift.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Built-in `default` project (platform-infra AppProject does not exist yet).
+  project: default
+
+  # SPIRE hardened charts. Declarative equivalent of:
+  #   helm repo add spiffe https://spiffe.github.io/helm-charts-hardened/
+  #   helm upgrade --install spire-crds spiffe/spire-crds -n spire-server --create-namespace
+  # Ships the SPIRE CRDs only (ClusterSPIFFEID, ClusterFederatedTrustDomain, ...).
+  source:
+    repoURL: https://spiffe.github.io/helm-charts-hardened/
+    chart: spire-crds
+    targetRevision: 0.5.0
+    helm:
+      releaseName: spire-crds
+
+  destination:
+    server: https://kubernetes.default.svc
+    # CRDs are cluster-scoped; namespace is just where ArgoCD anchors the app.
+    namespace: spire-server
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # CRDs carry large schemas; server-side apply avoids the client-side
+      # "metadata.annotations: Too long" error.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

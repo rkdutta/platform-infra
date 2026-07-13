@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: spire
+  namespace: argocd
+  # After spire-crds (wave 0). The chart renders ClusterSPIFFEID CRs that need
+  # those CRDs present. selfHeal/retry also converges once the CRDs land.
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    # The spire-controller-manager injects the webhook caBundle at runtime and
+    # spire-server writes the trust bundle into a ConfigMap — both are fields
+    # ArgoCD's default client-side diff would report as permanent OutOfSync.
+    # ServerSideDiff (paired with ServerSideApply below) computes the diff the
+    # same way it applies, so those runtime-owned fields aren't seen as drift.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Built-in `default` project (platform-infra AppProject does not exist yet).
+  project: default
+
+  # SPIRE hardened umbrella chart. Declarative equivalent of:
+  #   helm upgrade --install spire spiffe/spire -n spire-server --create-namespace
+  # Deploys the full core stack: spire-server (StatefulSet), spire-agent
+  # (DaemonSet), spiffe-csi-driver (DaemonSet) and the OIDC discovery provider.
+  source:
+    repoURL: https://spiffe.github.io/helm-charts-hardened/
+    chart: spire
+    targetRevision: 0.29.0   # SPIRE appVersion 1.14.5
+    helm:
+      releaseName: spire
+      values: |
+        global:
+          spire:
+            # Foundational identity namespace — baked into every SVID. Changing
+            # it later re-bootstraps the entire trust root, so it is fixed here.
+            trustDomain: platform.local
+            clusterName: platform-base   # the kind cluster name
+            # Let the chart create the spire-server and spire-system namespaces
+            # (the stack spans both) rather than pre-creating them out of band.
+            namespaces:
+              create: true
+          # These Helm pre/post hooks "autofix" install/upgrade issues, but the
+          # chart's own values warn they must be OFF when rendered via
+          # `helm template` — which is exactly how ArgoCD renders. Leaving them
+          # on produces ArgoCD hook Jobs that hang/fail the sync.
+          installAndUpgradeHooks:
+            enabled: false
+          deleteHooks:
+            enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    # Chart places resources in spire-server / spire-system explicitly and
+    # creates both namespaces (namespaces.create above), so no CreateNamespace.
+    namespace: spire-server
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Server-side apply so ArgoCD co-owns resources with the controller-manager
+      # / spire-server without fighting over their runtime-written fields.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

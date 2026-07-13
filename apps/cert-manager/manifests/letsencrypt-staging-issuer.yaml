@@ -1,0 +1,30 @@
+# Let's Encrypt STAGING ClusterIssuer (cluster-wide, usable from any namespace).
+#
+# Staging has generous rate limits and issues certs from an UNTRUSTED root
+# ("(STAGING) Let's Encrypt") — browsers will warn. Use it to validate the ACME
+# flow, then switch to the production issuer (acme-v02) once issuance works.
+#
+# NOTE: ACME HTTP-01 requires Let's Encrypt's servers to reach this cluster from
+# the public internet on port 80 at the certificate's DNS name. On a local kind
+# cluster addressed via *.127.0.0.1.sslip.io that inbound path does not exist,
+# so the ClusterIssuer registers its ACME account fine (outbound only), but
+# challenges for local hostnames will stay pending. This is production-ready for
+# a publicly reachable cluster / real DNS.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # ACME account contact. Change to your own address if desired.
+    email: rdutta@xebia.com
+    # cert-manager stores the generated ACME account private key here.
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            # Solve challenges by having cert-manager create temporary Ingress
+            # objects on the existing ingress-nginx controller.
+            ingressClassName: nginx
