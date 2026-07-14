@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: teams-operator
-        image: localhost:5001/teams-operator:0.1.0
+        image: localhost:5001/teams-operator:0.2.0
         imagePullPolicy: IfNotPresent
         env:
         # teams-api Service, same (engineering-platform) namespace, port 8000.
