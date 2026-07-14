@@ -1,0 +1,39 @@
+# An in-cluster DNS name for the kind local registry so the Ratify pod (which
+# runs as a Pod and therefore resolves via CoreDNS, not the node's containerd
+# mirror) can pull image manifests + cosign artifacts to verify them.
+#
+# The kind registry is a Docker container on the kind network; kubelet/containerd
+# reach it via the `localhost:5001` mirror, but Pods cannot. This Service (no
+# selector) + Endpoints points at the registry container's IP on the kind
+# network, which Pods CAN route to.
+#
+# NOTE: the endpoint IP is the `kind-registry` container's address on the kind
+# Docker network. If that container is recreated the IP can change — refresh it
+# with:  docker inspect kind-registry --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kind-registry
+  namespace: registry
+spec:
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: kind-registry
+  namespace: registry
+subsets:
+  - addresses:
+      - ip: 172.26.0.4
+    ports:
+      - name: http
+        port: 5000
