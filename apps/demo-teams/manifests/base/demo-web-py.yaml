@@ -11,7 +11,7 @@ metadata:
     app: demo-web-py
     app.kubernetes.io/name: demo-web-py
     app.kubernetes.io/version: "2.0.0"
-    app.kubernetes.io/part-of: demo-3tier-py
+    app.kubernetes.io/part-of: demo
 spec:
   replicas: 2
   revisionHistoryLimit: 3

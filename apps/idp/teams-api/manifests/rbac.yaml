@@ -27,19 +27,15 @@ rules:
 - apiGroups: ["constraints.gatekeeper.sh"]
   resources: ["*"]
   verbs: ["get", "list"]
-# List the applications a team is running, to show name + version on its card,
-# and map blue/green active/preview selectors to versions via the ReplicaSets.
+# List the applications a team is running, to show metadata on its cards, and
+# map blue/green active/preview selectors to versions via the ReplicaSets.
+# Read-only: rollout promotion is handled by the Argo Rollouts dashboard.
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets"]
   verbs: ["get", "list"]
-# Read + manage the team's blue/green rollouts (promote / set-image from the
-# portal). Promotion patches the rollout and its status subresource.
 - apiGroups: ["argoproj.io"]
   resources: ["rollouts"]
-  verbs: ["get", "list", "update", "patch"]
-- apiGroups: ["argoproj.io"]
-  resources: ["rollouts/status"]
-  verbs: ["get", "update", "patch"]
+  verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
