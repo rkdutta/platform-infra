@@ -20,6 +20,7 @@ spec:
         app: teams-api
         component: backend
     spec:
+      serviceAccountName: teams-api
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -29,7 +30,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: teams-api
-        image: localhost:5001/teams-api:0.1.0
+        image: localhost:5001/teams-api:0.2.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
