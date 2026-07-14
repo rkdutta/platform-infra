@@ -1,0 +1,91 @@
+# demo-web-py web tier as a standalone Argo Rollout (plain canary, no ingress).
+# Namespace is set by the per-team overlay (kustomize `namespace:`), so the same
+# base is deployed into each team namespace. The Teams UI surfaces this as
+# name + version from the app.kubernetes.io/name and /version labels.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-web-py
+  labels:
+    app: demo-web-py
+    app.kubernetes.io/name: demo-web-py
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/part-of: demo-3tier-py
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: demo-web-py
+  template:
+    metadata:
+      labels:
+        app: demo-web-py
+        app.kubernetes.io/name: demo-web-py
+        app.kubernetes.io/version: "2.0.0"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: demo-web-py
+          image: localhost:5001/demo-web-py:2.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  strategy:
+    canary: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-web-py
+  labels:
+    app: demo-web-py
+    app.kubernetes.io/name: demo-web-py
+spec:
+  selector:
+    app: demo-web-py
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

@@ -1,0 +1,6 @@
+# Deploy the demo apps into team "ddd"'s namespace.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: team-ddd
+resources:
+  - ../base

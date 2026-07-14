@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-teams
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Built-in `default` project (allows any destination namespace/cluster), same
+  # as the other apps in this repo.
+  project: default
+
+  # Kustomize source: apps/demo-teams/manifests aggregates the per-team overlays,
+  # so this one Application deploys the demo apps into each team namespace. The
+  # team namespaces themselves are created by the teams-operator, so this app
+  # does NOT create namespaces (no CreateNamespace) — a team must exist first.
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/demo-teams/manifests
+
+  destination:
+    server: https://kubernetes.default.svc
+    # Fallback only; every resource carries its own namespace via the overlays.
+    namespace: team-ddd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

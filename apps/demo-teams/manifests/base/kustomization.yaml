@@ -1,0 +1,7 @@
+# Base for the per-team demo apps. Deployed into a team namespace by an overlay
+# that sets `namespace:`. Add/remove apps here to change what every team runs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - demo-web-py.yaml
+  - demo-api-py.yaml
