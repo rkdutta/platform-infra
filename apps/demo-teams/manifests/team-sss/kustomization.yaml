@@ -1,6 +1,9 @@
-# Deploy the demo apps into team "sss"'s namespace.
+# Deploy the demo apps into team "sss"'s namespace: the Python "demo" apps
+# (../base) plus the Go "demo-go" apps (../base-go), shown as two separate
+# application cards in the portal.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: team-sss
 resources:
   - ../base
+  - ../base-go

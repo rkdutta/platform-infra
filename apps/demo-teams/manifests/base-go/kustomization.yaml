@@ -1,0 +1,7 @@
+# The Go 3-tier demo apps (demo-api + demo-web), grouped as the "demo-go"
+# application. Deployed into a team namespace by an overlay that sets namespace.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - demo-api.yaml
+  - demo-web.yaml
