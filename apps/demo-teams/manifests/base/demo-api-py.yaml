@@ -1,7 +1,7 @@
-# demo-api-py API tier as a standalone Argo Rollout (plain canary, no ingress).
-# Uses the app's default in-memory DB (DATABASE_URL unset). Namespace is set by
-# the per-team overlay. Surfaced in the Teams UI via the app.kubernetes.io
-# name/version labels.
+# demo-api-py API tier as a BLUE/GREEN Argo Rollout, managed from the Teams
+# portal. Uses the app's default in-memory DB (DATABASE_URL unset). activeService
+# serves live traffic; a new version rolls out behind previewService and is
+# promoted manually. Namespace is set by the per-team overlay.
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -73,12 +73,31 @@ spec:
         - name: tmp
           emptyDir: {}
   strategy:
-    canary: {}
+    blueGreen:
+      activeService: demo-api-py-active
+      previewService: demo-api-py-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: demo-api-py
+  name: demo-api-py-active
+  labels:
+    app: demo-api-py
+    app.kubernetes.io/name: demo-api-py
+spec:
+  selector:
+    app: demo-api-py
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-api-py-preview
   labels:
     app: demo-api-py
     app.kubernetes.io/name: demo-api-py

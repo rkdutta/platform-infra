@@ -1,7 +1,8 @@
-# demo-web-py web tier as a standalone Argo Rollout (plain canary, no ingress).
-# Namespace is set by the per-team overlay (kustomize `namespace:`), so the same
-# base is deployed into each team namespace. The Teams UI surfaces this as
-# name + version from the app.kubernetes.io/name and /version labels.
+# demo-web-py web tier as a BLUE/GREEN Argo Rollout, managed from the Teams
+# portal. activeService serves live (blue) traffic; a new version rolls out
+# behind previewService (green) and is promoted manually (autoPromotionEnabled:
+# false). Namespace is set by the per-team overlay. The Teams UI surfaces the
+# active/preview versions from the app.kubernetes.io/version label per ReplicaSet.
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -73,12 +74,31 @@ spec:
         - name: tmp
           emptyDir: {}
   strategy:
-    canary: {}
+    blueGreen:
+      activeService: demo-web-py-active
+      previewService: demo-web-py-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: demo-web-py
+  name: demo-web-py-active
+  labels:
+    app: demo-web-py
+    app.kubernetes.io/name: demo-web-py
+spec:
+  selector:
+    app: demo-web-py
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-web-py-preview
   labels:
     app: demo-web-py
     app.kubernetes.io/name: demo-web-py
