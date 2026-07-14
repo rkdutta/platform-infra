@@ -28,6 +28,14 @@ spec:
         featureFlags:
           RATIFY_CERT_ROTATION: true
 
+        # Disable Ratify's image-mutation webhook. It is cluster-wide and, with
+        # oras.useHttp below, fails closed when it can't resolve public HTTPS
+        # registries (e.g. the trivy scan-job image) — which would block
+        # unrelated pods. We only need validation (signature verification),
+        # scoped to the ratify-demo namespace by the Constraint.
+        provider:
+          enableMutation: false
+
         # The kind local registry is plain HTTP.
         oras:
           useHttp: true

@@ -1,0 +1,36 @@
+# Make Gatekeeper cache Trivy's VulnerabilityReport CRDs so referential
+# constraints can read them (via data.inventory). Plus RBAC so Gatekeeper's
+# audit/controller can list/watch those reports.
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: gatekeeper-system
+spec:
+  sync:
+    syncOnly:
+      - group: "aquasecurity.github.io"
+        version: "v1alpha1"
+        kind: "VulnerabilityReport"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gatekeeper-vulnerabilityreports-reader
+rules:
+  - apiGroups: ["aquasecurity.github.io"]
+    resources: ["vulnerabilityreports"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gatekeeper-vulnerabilityreports-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gatekeeper-vulnerabilityreports-reader
+subjects:
+  - kind: ServiceAccount
+    name: gatekeeper-admin
+    namespace: gatekeeper-system

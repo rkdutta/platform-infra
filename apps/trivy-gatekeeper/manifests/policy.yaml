@@ -1,0 +1,55 @@
+# Architecture B gate: a Gatekeeper REFERENTIAL constraint that reads Trivy's
+# VulnerabilityReport (synced via config-sync.yaml) for each pod's workload and
+# flags it when the image has too many Critical CVEs.
+#
+# enforcementAction: dryrun -> Gatekeeper AUDIT records violations (surfacing in
+# the portal compliance badges) without blocking admission. This fits Trivy
+# Operator's continuous-scanning model: reports are produced AFTER a workload
+# runs, so blocking at admission would reject first-time deploys.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8strivyvulnerabilities
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sTrivyVulnerabilities
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            maxCritical:
+              type: integer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8strivyvulnerabilities
+
+        # For a pod, find the VulnerabilityReport for its owning workload
+        # (Trivy labels reports with the owner's name) and flag excess criticals.
+        violation[{"msg": msg}] {
+          owner := input.review.object.metadata.ownerReferences[_]
+          ns := input.review.object.metadata.namespace
+          report := data.inventory.namespace[ns]["aquasecurity.github.io/v1alpha1"]["VulnerabilityReport"][_]
+          report.metadata.labels["trivy-operator.resource.name"] == owner.name
+          crit := report.report.summary.criticalCount
+          max := object.get(input.parameters, "maxCritical", 0)
+          crit > max
+          msg := sprintf("image %v has %v critical CVEs (max allowed %v) [VulnerabilityReport %v]", [report.report.artifact.repository, crit, max, report.metadata.name])
+        }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sTrivyVulnerabilities
+metadata:
+  name: no-critical-cves
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - trivy-demo
+  parameters:
+    maxCritical: 0
