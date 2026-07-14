@@ -26,6 +26,8 @@ spec:
     spec:
       containers:
       - name: teams-app
+        # 0.3.9: add Discard (revert preview to active) to the blue/green
+        # controls — POST /api/teams/{id}/apps/{app}/discard -> teams-api.
         # 0.3.8: blue/green management on the app cards — active/preview version,
         # phase, and Promote / Deploy-new-version controls (POST /api/teams/{id}/
         # apps/{app}/promote and .../image -> teams-api).
@@ -37,7 +39,7 @@ spec:
         # 0.3.5: HTTPS SSO working end-to-end. Baked KEYCLOAK_URL=https://
         # platform-auth...:8443/auth; app.module sets useNonce:false (keycloak-js
         # 22 vs Keycloak 26 nonce mismatch). nginx.k8s.conf proxies /api/* -> teams-api.
-        image: localhost:5001/teams-app:0.3.8
+        image: localhost:5001/teams-app:0.3.9
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
