@@ -1,4 +1,5 @@
-# Teams API — FastAPI backend (in-memory team store).
+# Teams API — FastAPI backend. The team store is persisted to a PersistentVolume
+# (see pvc.yaml) mounted at /data, so team data survives pod restarts.
 # Image is served from the kind local registry (localhost:5001 on the host,
 # resolved in-cluster via the containerd mirror -> http://kind-registry:5000).
 apiVersion: apps/v1
@@ -11,6 +12,10 @@ metadata:
     component: backend
 spec:
   replicas: 1
+  # Recreate (not RollingUpdate): the data PVC is ReadWriteOnce, so the old pod
+  # must release it before the new pod can mount it.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: teams-api
@@ -30,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: teams-api
-        image: localhost:5001/teams-api:0.2.2
+        image: localhost:5001/teams-api:0.3.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
@@ -39,6 +44,11 @@ spec:
           value: "0.0.0.0"
         - name: PORT
           value: "8000"
+        - name: DATA_DIR
+          value: "/data"
+        volumeMounts:
+        - name: data
+          mountPath: /data
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
@@ -64,3 +74,7 @@ spec:
             port: 8000
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: teams-api-data

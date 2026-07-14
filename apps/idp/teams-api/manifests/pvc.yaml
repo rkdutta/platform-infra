@@ -1,0 +1,17 @@
+# Persistent storage for the Teams API team store (teams.json). Without this the
+# store is in-memory and every pod roll wipes all teams, which then makes the
+# teams-operator prune the per-team namespaces. Uses the cluster's default
+# StorageClass (kind: `standard` / local-path, WaitForFirstConsumer).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: teams-api-data
+  namespace: engineering-platform
+  labels:
+    app: teams-api
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
