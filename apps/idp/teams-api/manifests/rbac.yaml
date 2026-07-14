@@ -27,6 +27,13 @@ rules:
 - apiGroups: ["constraints.gatekeeper.sh"]
   resources: ["*"]
   verbs: ["get", "list"]
+# List the applications a team is running, to show name + version on its card.
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list"]
+- apiGroups: ["argoproj.io"]
+  resources: ["rollouts"]
+  verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
