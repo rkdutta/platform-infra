@@ -26,6 +26,8 @@ spec:
     spec:
       containers:
       - name: teams-app
+        # 0.4.3: team name links to the team namespace rollout list
+        # (<ROLLOUTS_URL>/rollouts/<ns>/).
         # 0.4.2: fix dashboard deep-link path to /rollouts/rollout/<ns>/<app>.
         # 0.4.1: component cards deep-link (new tab) to the Argo Rollouts
         # dashboard (baked build ARG ROLLOUTS_URL).
@@ -46,7 +48,7 @@ spec:
         # 0.3.5: HTTPS SSO working end-to-end. Baked KEYCLOAK_URL=https://
         # platform-auth...:8443/auth; app.module sets useNonce:false (keycloak-js
         # 22 vs Keycloak 26 nonce mismatch). nginx.k8s.conf proxies /api/* -> teams-api.
-        image: localhost:5001/teams-app:0.4.2
+        image: localhost:5001/teams-app:0.4.3
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
