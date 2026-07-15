@@ -1,0 +1,26 @@
+# AppProject for the Resource plane — networking edge and data-provider operators.
+# Guardrail: apps in this plane may only source from the repos listed below.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: resource
+  namespace: argocd
+  labels:
+    plane: resource
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Resource plane — networking edge and data-provider operators
+  sourceRepos:
+    - https://kubernetes.github.io/ingress-nginx
+    - https://cloudnative-pg.github.io/charts
+    - https://github.com/rkdutta/platform-infra.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

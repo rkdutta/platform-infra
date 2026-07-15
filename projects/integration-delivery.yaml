@@ -1,0 +1,25 @@
+# AppProject for the Integration & Delivery plane — artifact registry and delivery.
+# Guardrail: apps in this plane may only source from the repos listed below.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: integration-delivery
+  namespace: argocd
+  labels:
+    plane: integration-delivery
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Integration & Delivery plane — artifact registry and delivery
+  sourceRepos:
+    - https://helm.goharbor.io
+    - https://github.com/rkdutta/platform-infra.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

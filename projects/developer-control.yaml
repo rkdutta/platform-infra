@@ -1,0 +1,24 @@
+# AppProject for the Developer Control plane — self-service portal and platform APIs.
+# Guardrail: apps in this plane may only source from the repos listed below.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: developer-control
+  namespace: argocd
+  labels:
+    plane: developer-control
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Developer Control plane — self-service portal and platform APIs
+  sourceRepos:
+    - https://github.com/rkdutta/platform-infra.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: teams-api
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: developer-control
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  # Built-in `default` project (no dedicated AppProject exists yet).
+  project: developer-control
+  # Deployment/Service/Ingress live in git. `path` points at the manifests/
+  # subdir so this Application manifest itself is NOT rendered as a resource.
+  # The container image is pulled separately from the kind local registry.
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/developer-control/teams-api/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: engineering-platform
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-issuers
+  namespace: argocd
+  # After cert-manager (wave 0). The ClusterIssuer needs cert-manager's CRDs +
+  # webhook Ready before it can be admitted; the retry/selfHeal below converge
+  # it once they are (same pattern as keycloak-db waiting on the CNPG CRDs).
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+spec:
+  # Built-in `default` project (platform-infra AppProject does not exist yet).
+  project: security
+  # ClusterIssuer(s) live in git. `path` points at the manifests/ subdir so the
+  # cert-manager Helm Application (apps/cert-manager/application.yaml) and this
+  # issuers Application (apps/cert-manager/issuers-application.yaml) — both of
+  # which sit OUTSIDE manifests/ — are not themselves rendered as resources.
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/security/cert-manager/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    # ClusterIssuer is cluster-scoped; namespace just anchors the app.
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      # If cert-manager isn't ready yet, applying the ClusterIssuer fails
+      # ("no matches for kind ClusterIssuer" / webhook unavailable); retries
+      # let it converge without manual intervention.
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,28 @@
+# AppProject for the Tenant landing zone — application workloads deployed onto the platform.
+# Guardrail: apps in this plane may only source from the repos listed below.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tenant-workloads
+  namespace: argocd
+  labels:
+    plane: tenant-workloads
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Tenant landing zone — application workloads deployed onto the platform
+  sourceRepos:
+    - https://github.com/rkdutta/platform-infra.git
+    - https://github.com/rkdutta/demo-api.git
+    - https://github.com/rkdutta/demo-api-py.git
+    - https://github.com/rkdutta/demo-web.git
+    - https://github.com/rkdutta/demo-web-py.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

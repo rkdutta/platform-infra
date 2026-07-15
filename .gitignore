@@ -1,3 +1,5 @@
 .venv
 kubeconfig
 init-keys.json
+# Contains a real repo PAT — never commit
+bootstrap/repo-credentials.yaml

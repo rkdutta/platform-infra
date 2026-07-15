@@ -1,0 +1,73 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ratify
+  namespace: argocd
+  annotations:
+    # Ratify installs CRDs (Store/Verifier/KeyManagementProvider/Policy);
+    # server-side apply avoids client-side apply size/annotation issues and
+    # matches how gatekeeper is applied.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+spec:
+  project: security
+  # Ratify = the verification engine Gatekeeper calls (via its external-data
+  # API) to verify image signatures/attestations at admission (Architecture A).
+  # Installed into gatekeeper-system alongside the controller it plugs into.
+  source:
+    repoURL: https://notaryproject.github.io/ratify
+    chart: ratify
+    targetRevision: 1.15.4
+    helm:
+      releaseName: ratify
+      values: |
+        # Provider TLS (Gatekeeper <-> Ratify mTLS) is self-rotated; no manual
+        # certs needed. cert-manager is present in the cluster.
+        featureFlags:
+          RATIFY_CERT_ROTATION: true
+
+        # Disable Ratify's image-mutation webhook. It is cluster-wide and, with
+        # oras.useHttp below, fails closed when it can't resolve public HTTPS
+        # registries (e.g. the trivy scan-job image) — which would block
+        # unrelated pods. We only need validation (signature verification),
+        # scoped to the ratify-demo namespace by the Constraint.
+        provider:
+          enableMutation: false
+
+        # The kind local registry is plain HTTP.
+        oras:
+          useHttp: true
+
+        # This demo verifies cosign signatures only; disable the Notation
+        # verifier so cosign-signed (but not notation-signed) images pass.
+        notation:
+          enabled: false
+
+        # Trusted cosign public key (supply-chain/keys/cosign.pub). The chart
+        # turns this into a KeyManagementProvider + cosign Verifier.
+        cosignKeys:
+          - |
+            -----BEGIN PUBLIC KEY-----
+            MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsE47KmxlrW2HXl3ryIn3jOH6KqXb
+            O2qJ1R3MZYfYpnQDFjq0jHv5bFAYA2Lqq97ZxFDc5AykjyAWMT51rPNM/A==
+            -----END PUBLIC KEY-----
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gatekeeper-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

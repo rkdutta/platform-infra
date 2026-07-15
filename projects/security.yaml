@@ -1,0 +1,32 @@
+# AppProject for the Security plane — identity, policy, secrets, PKI, supply-chain trust, runtime defense.
+# Guardrail: apps in this plane may only source from the repos listed below.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: security
+  namespace: argocd
+  labels:
+    plane: security
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Security plane — identity, policy, secrets, PKI, supply-chain trust, runtime defense
+  sourceRepos:
+    - https://charts.jetstack.io
+    - https://spiffe.github.io/helm-charts-hardened/
+    - https://open-policy-agent.github.io/gatekeeper/charts
+    - https://openbao.github.io/openbao-helm
+    - https://codecentric.github.io/helm-charts
+    - https://notaryproject.github.io/ratify
+    - https://aquasecurity.github.io/helm-charts/
+    - https://falcosecurity.github.io/charts
+    - https://github.com/rkdutta/platform-infra.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-api-py
+  namespace: argocd
+  # Wave 1: after ingress-nginx (0); the Argo Rollouts controller is present.
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: workloads
+spec:
+  project: tenant-workloads
+  # App code + deploy manifests live in the demo-api-py repo; the image is
+  # pulled from the kind local registry (localhost:5001/demo-api-py).
+  source:
+    repoURL: https://github.com/rkdutta/demo-api-py.git
+    targetRevision: main
+    path: deploy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-py
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

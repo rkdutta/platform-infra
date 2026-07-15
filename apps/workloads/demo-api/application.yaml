@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-api
+  namespace: argocd
+  # Wave 1: after ingress-nginx (wave 0) so the API's Ingress is routable, and
+  # so the Argo Rollouts controller (installed with Argo CD) is present to
+  # reconcile the Rollout object.
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: workloads
+spec:
+  project: tenant-workloads
+  # App CODE and its deploy manifests live together in the demo-api repo; the
+  # container image is pulled separately from the kind local registry
+  # (localhost:5001/demo-api). This Application only references the manifests.
+  source:
+    repoURL: https://github.com/rkdutta/demo-api.git
+    targetRevision: main
+    path: deploy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

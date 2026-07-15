@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ratify-config
+  namespace: argocd
+  annotations:
+    # Apply after the ratify chart (its CRDs + external-data provider) exists.
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+spec:
+  project: security
+  # Cluster-side config for Architecture A: an in-cluster DNS name for the kind
+  # registry (so the Ratify pod can reach it), and the Gatekeeper policy that
+  # calls Ratify to verify image signatures in the demo namespace.
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/security/ratify/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gatekeeper-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

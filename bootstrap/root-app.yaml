@@ -1,0 +1,47 @@
+# App-of-apps root — the single ordered entrypoint for the whole platform.
+#
+# One recursive Application (NOT a per-plane hierarchy). This is deliberate:
+# sync-waves only gate *within* one parent's sync, so all leaf Applications must
+# share this single sync context for the cross-plane wave ordering to hold —
+# e.g. wave 0 spans the resource + security + monitoring planes, and Argo CD
+# holds wave 1 until every wave-0 app is Synced AND Healthy.
+#
+# Grouping into planes is expressed by directory (apps/<plane>/<app>/), a
+# `plane` label, and one AppProject per plane (see projects/). Ordering is
+# expressed by argocd.argoproj.io/sync-wave on each leaf (0..5).
+#
+# Prerequisites, applied once before this (see bootstrap/README.md):
+#   1. bootstrap/repo-credentials.yaml   (private-repo PAT secret)
+#   2. projects/                         (the 6 plane AppProjects)
+# Then: kubectl apply -f bootstrap/root-app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps
+    directory:
+      recurse: true
+      # Render ONLY the child Application manifests, not the raw workload
+      # manifests under apps/<plane>/<app>/manifests/. Every Argo Application
+      # file is named *application.yaml; nothing under manifests/ is.
+      include: '{**/application.yaml,**/*-application.yaml}'
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

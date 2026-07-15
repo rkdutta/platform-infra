@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trivy-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+spec:
+  project: security
+  # Trivy Operator continuously scans running workloads and emits
+  # VulnerabilityReport CRDs (Architecture B). A Gatekeeper referential
+  # constraint (see apps/trivy-gatekeeper) then gates on those reports.
+  source:
+    repoURL: https://aquasecurity.github.io/helm-charts/
+    chart: trivy-operator
+    targetRevision: 0.34.0
+    helm:
+      releaseName: trivy-operator
+      values: |
+        # Scan the trivy-demo namespace (keeps it light). NOTE: scanning the
+        # real Python apps (team-sss/demo-py) needs their localhost:5001 image
+        # refs redirected to the in-cluster registry Service via a trivy
+        # registry mirror; chart 0.34.0 doesn't render trivy.registry.mirror /
+        # insecureRegistries into the scan config, so that's a follow-up. The
+        # demo scans python:3.13-slim (the same base the Python apps use) from a
+        # public registry to prove the Architecture B gate.
+        targetNamespaces: "trivy-demo"
+
+        # The node-collector runs one Job per node (pinned via nodeSelector to
+        # each node's hostname) to scan node config. On this kind cluster the
+        # control-plane node carries the standard
+        # node-role.kubernetes.io/control-plane:NoSchedule taint, which the
+        # collector didn't tolerate -> its Job sat Pending forever. Tolerate it
+        # so every node (control-plane included) gets scanned.
+        nodeCollector:
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: trivy-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

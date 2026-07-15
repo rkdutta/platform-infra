@@ -1,0 +1,81 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  # Built-in `default` project (platform-infra AppProject does not exist yet).
+  project: security
+  # Alternative to application.yaml: instead of inlining the rule under Helm
+  # customRules, the rule lives in git (apps/falco/rules/root-detect-rule.yaml),
+  # is turned into a ConfigMap by Kustomize, and Falco mounts it. Roughly:
+  #   helm upgrade falco falcosecurity/falco --namespace falco-system \
+  #     --set driver.kind=modern_ebpf --set falcosidekick.enabled=true
+  #   kubectl -n falco-system create configmap falco-custom-rules \
+  #     --from-file=apps/falco/rules/root-detect-rule.yaml   # mounted at rules.d
+  #
+  # Two sources, both applied to falco-system:
+  #   1. this git repo, rendered with Kustomize -> the ConfigMap
+  #   2. the upstream Falco Helm chart, mounting that ConfigMap
+  sources:
+    # --- Source 1: the git-managed rules ConfigMap ---
+    - repoURL: https://github.com/rkdutta/platform-infra.git
+      targetRevision: main
+      path: apps/security/falco/rules # has kustomization.yaml -> ArgoCD uses Kustomize
+    # --- Source 2: the Falco chart ---
+    - repoURL: https://falcosecurity.github.io/charts
+      chart: falco
+      targetRevision: 9.1.0 # appVersion 0.44.1
+      helm:
+        releaseName: falco
+        values: |
+          # --set driver.kind=modern_ebpf
+          driver:
+            kind: modern_ebpf
+
+          # --set falcosidekick.enabled=true
+          falcosidekick:
+            enabled: true
+
+          # Falco config (this whole map is written into /etc/falco/falco.yaml).
+          falco:
+            # Fixes "Error: could not initialize inotify handler" on nodes with
+            # low fs.inotify.max_user_instances (kind/k3s/minikube). This turns
+            # off rules/config hot-reload; Falco reloads rules on pod restart,
+            # which is fine under GitOps (ArgoCD restarts on ConfigMap change if
+            # you add a checksum annotation, or just rollout-restart the ds).
+            watch_config_files: false
+
+          # Mount our ConfigMap into /etc/falco/rules.d, which Falco already
+          # loads by default — so the rule is picked up with no customRules
+          # inlined here. Keys in the ConfigMap become *.yaml files in rules.d.
+          extraVolumes:
+            - name: falco-custom-rules
+              configMap:
+                name: falco-custom-rules
+          extraVolumeMounts:
+            - name: falco-custom-rules
+              mountPath: /etc/falco/rules.d
+              readOnly: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: falco-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Equivalent of `helm upgrade --namespace falco-system` creating the ns.
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
