@@ -10,7 +10,7 @@ metadata:
     app: demo-api-py
     app.kubernetes.io/name: demo-api-py
     app.kubernetes.io/version: "1.0.0"
-    app.kubernetes.io/part-of: demo
+    app.kubernetes.io/part-of: demo-py
     # Classifies the app for the Teams portal: an "api" card links to its docs.
     app.kubernetes.io/component: api
   annotations:

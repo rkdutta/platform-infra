@@ -11,7 +11,7 @@ metadata:
     app: demo-web-py
     app.kubernetes.io/name: demo-web-py
     app.kubernetes.io/version: "2.0.0"
-    app.kubernetes.io/part-of: demo
+    app.kubernetes.io/part-of: demo-py
     # Classifies the app for the Teams portal: a "web" card links to the page.
     app.kubernetes.io/component: web
 spec:

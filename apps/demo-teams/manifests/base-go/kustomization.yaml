@@ -3,5 +3,5 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - demo-api.yaml
-  - demo-web.yaml
+  - demo-api-go.yaml
+  - demo-web-go.yaml

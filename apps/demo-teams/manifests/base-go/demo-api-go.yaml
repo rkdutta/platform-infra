@@ -1,28 +1,35 @@
-# demo-web (Go) — the web tier of the Go 3-tier demo, as a blue/green Rollout.
-# Part of the "demo-go" application card (separate from the Python "demo" card).
+# demo-api-go — the API tier of the Go 3-tier demo, as a blue/green Rollout.
+# Grouped under app.kubernetes.io/part-of: demo-go so the Teams portal shows it
+# as a SEPARATE application card ("demo-go") from the Python "demo-py" card. The
+# workload/Services are named demo-api-go so the card + Rollouts dashboard match;
+# the image repo stays localhost:5001/demo-api (unchanged, still signed).
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
-  name: demo-web
+  name: demo-api-go
   labels:
-    app: demo-web
-    app.kubernetes.io/name: demo-web
-    app.kubernetes.io/version: "2.0.0"
+    app: demo-api-go
+    app.kubernetes.io/name: demo-api-go
+    app.kubernetes.io/version: "2.1.0"
     app.kubernetes.io/part-of: demo-go
-    # Classifies the app for the Teams portal: a "web" card links to the page.
-    app.kubernetes.io/component: web
+    # Classifies the app for the Teams portal: an "api" card links to its docs.
+    app.kubernetes.io/component: api
+  annotations:
+    # Where this API serves its Swagger/OpenAPI UI. The Teams portal links the
+    # "api" card to <ingress-host>/docs. 2.1.0 adds this endpoint to the Go API.
+    platform.example.com/docs-path: /docs
 spec:
   replicas: 2
   revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app: demo-web
+      app: demo-api-go
   template:
     metadata:
       labels:
-        app: demo-web
-        app.kubernetes.io/name: demo-web
-        app.kubernetes.io/version: "2.0.0"
+        app: demo-api-go
+        app.kubernetes.io/name: demo-api-go
+        app.kubernetes.io/version: "2.1.0"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -31,8 +38,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: demo-web
-          image: localhost:5001/demo-web:2.0.0
+        - name: demo-api-go
+          image: localhost:5001/demo-api:2.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -68,21 +75,21 @@ spec:
             periodSeconds: 5
   strategy:
     blueGreen:
-      activeService: demo-web-active
-      previewService: demo-web-preview
+      activeService: demo-api-go-active
+      previewService: demo-api-go-preview
       autoPromotionEnabled: false
       scaleDownDelaySeconds: 30
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: demo-web-active
+  name: demo-api-go-active
   labels:
-    app: demo-web
-    app.kubernetes.io/name: demo-web
+    app: demo-api-go
+    app.kubernetes.io/name: demo-api-go
 spec:
   selector:
-    app: demo-web
+    app: demo-api-go
   ports:
     - name: http
       port: 80
@@ -91,46 +98,38 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: demo-web-preview
+  name: demo-api-go-preview
   labels:
-    app: demo-web
-    app.kubernetes.io/name: demo-web
+    app: demo-api-go
+    app.kubernetes.io/name: demo-api-go
 spec:
   selector:
-    app: demo-web
+    app: demo-api-go
   ports:
     - name: http
       port: 80
       targetPort: http
 ---
-# Public entry point for the Go web tier. Its browser JS fetches the API
-# same-origin at /api (empty API_BASE), so /api routes to the API tier's active
-# Service and everything else to this web tier. The Teams portal links the "web"
-# card to http://demo-web.127.0.0.1.sslip.io:8080/.
+# Direct host for the Go API tier, so its Swagger UI (/docs, added in 2.1.0) is
+# reachable in the browser. Routes to the blue/green active Service. The Teams
+# portal links the "api" card to http://demo-api-go.127.0.0.1.sslip.io:8080/docs.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: demo-web
+  name: demo-api-go
   labels:
-    app: demo-web
-    app.kubernetes.io/name: demo-web
+    app: demo-api-go
+    app.kubernetes.io/name: demo-api-go
 spec:
   ingressClassName: nginx
   rules:
-    - host: demo-web.127.0.0.1.sslip.io
+    - host: demo-api-go.127.0.0.1.sslip.io
       http:
         paths:
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: demo-api-active
-                port:
-                  number: 80
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: demo-web-active
+                name: demo-api-go-active
                 port:
                   number: 80
