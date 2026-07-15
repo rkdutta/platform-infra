@@ -1,0 +1,50 @@
+# REPORT-ONLY: an image is non-compliant if its supply-chain evidence can't be
+# verified. Calls the `ratify-provider` external-data provider (installed by the
+# ratify app), which checks the cosign signature + SBOM/vuln/quality attestations
+# attached to each image. Self-contained (own kind) so it doesn't depend on the
+# ratify app's own ConstraintTemplate being present.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8ssupplychainevidence
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sSupplyChainEvidence
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8ssupplychainevidence
+
+        remote_data := response {
+          images := [img | img = input.review.object.spec.containers[_].image]
+          images_init := [img | img = input.review.object.spec.initContainers[_].image]
+          images_ephemeral := [img | img = input.review.object.spec.ephemeralContainers[_].image]
+          other_images := array.concat(images_init, images_ephemeral)
+          all_images := array.concat(other_images, images)
+          response := external_data({"provider": "ratify-provider", "keys": all_images})
+        }
+
+        violation[{"msg": msg}] {
+          general_violation[{"result": msg}]
+        }
+
+        # provider itself errored
+        general_violation[{"result": result}] {
+          err := remote_data.system_error
+          err != ""
+          result := sprintf("supply-chain provider error: %s", [err])
+        }
+        general_violation[{"result": result}] {
+          count(remote_data.errors) > 0
+          result := sprintf("could not read supply-chain evidence: %s", [remote_data.errors])
+        }
+        # verification returned a negative result for an image
+        general_violation[{"result": result}] {
+          subject_validation := remote_data.responses[_]
+          subject_validation[1].isSuccess == false
+          result := sprintf("image %s has no verifiable supply-chain evidence — non-compliant", [subject_validation[0]])
+        }
