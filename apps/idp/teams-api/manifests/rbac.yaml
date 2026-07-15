@@ -53,3 +53,29 @@ subjects:
 - kind: ServiceAccount
   name: teams-api
   namespace: engineering-platform
+---
+# Read the app-compliance ConfigMap (offline supply-chain report) that feeds the
+# per-app compliance badge. Namespaced: only teams-api's own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: teams-api-configmap-reader
+  namespace: engineering-platform
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: teams-api-configmap-reader
+  namespace: engineering-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: teams-api-configmap-reader
+subjects:
+- kind: ServiceAccount
+  name: teams-api
+  namespace: engineering-platform

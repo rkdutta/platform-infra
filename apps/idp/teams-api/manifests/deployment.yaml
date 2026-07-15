@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: teams-api
-        image: localhost:5001/teams-api:0.6.0
+        image: localhost:5001/teams-api:0.7.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
@@ -52,6 +52,12 @@ spec:
           value: "http"
         - name: PUBLIC_INGRESS_PORT
           value: "8080"
+        # Own namespace, so the app-compliance ConfigMap (per-app supply-chain
+        # report) is read from the right place for the compliance badges.
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         volumeMounts:
         - name: data
           mountPath: /data

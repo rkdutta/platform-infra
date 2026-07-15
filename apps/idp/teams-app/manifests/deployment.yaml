@@ -45,6 +45,10 @@ spec:
         # apps/{app}/promote and .../image -> teams-api).
         # 0.3.7: team cards also show the applications running in the team
         # namespace (name + version), via /api/applications -> teams-api.
+        # 0.7.0: per-app compliance badge on each component card, expandable to
+        # the verified policies — supply-chain evidence (signed / SBOM / no
+        # critical CVEs / quality, from the app-compliance ConfigMap) merged with
+        # live per-app Gatekeeper results.
         # 0.6.0: application cards link out — "web" cards to the app page, "api"
         # cards to Swagger docs (URL discovered from the app's Ingress by
         # teams-api). Compliance badge relabeled as NAMESPACE policy compliance
@@ -58,7 +62,7 @@ spec:
         # 0.3.5: HTTPS SSO working end-to-end. Baked KEYCLOAK_URL=https://
         # platform-auth...:8443/auth; app.module sets useNonce:false (keycloak-js
         # 22 vs Keycloak 26 nonce mismatch). nginx.k8s.conf proxies /api/* -> teams-api.
-        image: localhost:5001/teams-app:0.6.0
+        image: localhost:5001/teams-app:0.7.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
