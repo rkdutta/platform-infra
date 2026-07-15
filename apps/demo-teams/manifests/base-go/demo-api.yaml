@@ -8,8 +8,14 @@ metadata:
   labels:
     app: demo-api
     app.kubernetes.io/name: demo-api
-    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/version: "2.1.0"
     app.kubernetes.io/part-of: demo-go
+    # Classifies the app for the Teams portal: an "api" card links to its docs.
+    app.kubernetes.io/component: api
+  annotations:
+    # Where this API serves its Swagger/OpenAPI UI. The Teams portal links the
+    # "api" card to <ingress-host>/docs. 2.1.0 adds this endpoint to the Go API.
+    platform.example.com/docs-path: /docs
 spec:
   replicas: 2
   revisionHistoryLimit: 3
@@ -21,7 +27,7 @@ spec:
       labels:
         app: demo-api
         app.kubernetes.io/name: demo-api
-        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/version: "2.1.0"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -31,7 +37,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: demo-api
-          image: localhost:5001/demo-api:2.0.0
+          image: localhost:5001/demo-api:2.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -101,3 +107,27 @@ spec:
     - name: http
       port: 80
       targetPort: http
+---
+# Direct host for the Go API tier, so its Swagger UI (/docs, added in 2.1.0) is
+# reachable in the browser. Routes to the blue/green active Service. The Teams
+# portal links the "api" card to http://demo-api.127.0.0.1.sslip.io:8080/docs.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-api
+  labels:
+    app: demo-api
+    app.kubernetes.io/name: demo-api
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: demo-api.127.0.0.1.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-api-active
+                port:
+                  number: 80

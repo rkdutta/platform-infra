@@ -11,6 +11,12 @@ metadata:
     app.kubernetes.io/name: demo-api-py
     app.kubernetes.io/version: "1.0.0"
     app.kubernetes.io/part-of: demo
+    # Classifies the app for the Teams portal: an "api" card links to its docs.
+    app.kubernetes.io/component: api
+  annotations:
+    # Where this API serves its Swagger/OpenAPI UI (FastAPI default). The Teams
+    # portal links the "api" card to <ingress-host>/docs.
+    platform.example.com/docs-path: /docs
 spec:
   replicas: 2
   revisionHistoryLimit: 3
@@ -108,3 +114,27 @@ spec:
     - name: http
       port: 80
       targetPort: http
+---
+# Direct host for the API tier, so its Swagger UI (/docs) is reachable in the
+# browser. Routes to the blue/green active Service. The Teams portal links the
+# "api" card to http://demo-api-py.127.0.0.1.sslip.io:8080/docs.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-api-py
+  labels:
+    app: demo-api-py
+    app.kubernetes.io/name: demo-api-py
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: demo-api-py.127.0.0.1.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-api-py-active
+                port:
+                  number: 80

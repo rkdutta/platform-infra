@@ -12,6 +12,8 @@ metadata:
     app.kubernetes.io/name: demo-web-py
     app.kubernetes.io/version: "2.0.0"
     app.kubernetes.io/part-of: demo
+    # Classifies the app for the Teams portal: a "web" card links to the page.
+    app.kubernetes.io/component: web
 spec:
   replicas: 2
   revisionHistoryLimit: 3
@@ -109,3 +111,35 @@ spec:
     - name: http
       port: 80
       targetPort: http
+---
+# Public entry point for the web tier. The page's browser JS fetches the API
+# same-origin at /api (see demo-web-py: empty API_BASE), so /api is routed to
+# the API tier's active Service and everything else to this web tier. The Teams
+# portal links the "web" card to http://demo-web-py.127.0.0.1.sslip.io:8080/.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-web-py
+  labels:
+    app: demo-web-py
+    app.kubernetes.io/name: demo-web-py
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: demo-web-py.127.0.0.1.sslip.io
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-api-py-active
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-web-py-active
+                port:
+                  number: 80
