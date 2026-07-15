@@ -1,0 +1,22 @@
+# Deny non-Rollout workload controllers in tenant namespaces. Deliberately does
+# NOT match ReplicaSet or Pod — an Argo Rollout creates those itself, and
+# blocking them would break Rollouts. Jobs/CronJobs are left alone (tasks, not
+# long-running workloads).
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRolloutOnly
+metadata:
+  name: tenant-require-rollout
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+      - apiGroups: [""]
+        kinds: ["ReplicationController"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists

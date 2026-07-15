@@ -1,0 +1,27 @@
+# Enforce (deny at admission) that workloads in tenant namespaces pull images
+# only from Harbor. Scoped to namespaces the teams-operator labels with
+# teams.example.com/team-id — so platform/system namespaces are untouched.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: tenant-images-from-harbor
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+      - apiGroups: ["batch"]
+        kinds: ["Job"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  parameters:
+    repos:
+      - "harbor.127.0.0.1.sslip.io/"
+      - "harbor.127.0.0.1.sslip.io:8443/"

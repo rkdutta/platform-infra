@@ -1,0 +1,37 @@
+# Gatekeeper image-provenance + workload-kind policy for tenant namespaces.
+# Sits in the security plane, after gatekeeper (wave 0) is up. Resource-level
+# sync-waves apply the ConstraintTemplates (wave 0) before their Constraints
+# (wave 1); retry covers the brief window while Gatekeeper generates the
+# constraint CRDs from the templates.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: image-policy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+spec:
+  project: security
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/security/image-policy/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gatekeeper-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

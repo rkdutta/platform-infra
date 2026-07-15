@@ -1,0 +1,22 @@
+# Tenant workloads must be Argo Rollouts. This template denies any object it is
+# matched against — the Constraint below matches only the non-Rollout workload
+# controllers, so matching == violation.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srolloutonly
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRolloutOnly
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srolloutonly
+
+        violation[{"msg": msg}] {
+          msg := sprintf("tenant workloads must be Argo Rollouts (argoproj.io/Rollout); %v %q is not allowed in tenant namespaces", [input.review.object.kind, input.review.object.metadata.name])
+        }

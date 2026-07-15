@@ -1,0 +1,45 @@
+# Tenant images must come from Harbor. Extracts container images from both a
+# bare Pod spec and any workload pod-template (Rollout/Deployment/Job/...), so
+# the same template works whichever kind the Constraint below matches.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedrepos
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRepos
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            repos:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedrepos
+
+        violation[{"msg": msg}] {
+          c := input_container[_]
+          not image_allowed(c.image)
+          msg := sprintf("image %q in container <%v> is not from an allowed registry; tenant workloads must pull from %v", [c.image, c.name, input.parameters.repos])
+        }
+
+        # containers on a bare Pod
+        input_container[c] { c := input.review.object.spec.containers[_] }
+        input_container[c] { c := input.review.object.spec.initContainers[_] }
+        input_container[c] { c := input.review.object.spec.ephemeralContainers[_] }
+        # containers on a workload pod-template (Rollout, Deployment, Job, ...)
+        input_container[c] { c := input.review.object.spec.template.spec.containers[_] }
+        input_container[c] { c := input.review.object.spec.template.spec.initContainers[_] }
+
+        image_allowed(image) {
+          repo := input.parameters.repos[_]
+          startswith(image, repo)
+        }
