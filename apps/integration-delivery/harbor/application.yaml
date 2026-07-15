@@ -48,6 +48,23 @@ spec:
         # Default admin creds for the local demo — CHANGE THIS. Login: admin.
         harborAdminPassword: "Harbor12345"
 
+        # Pin Harbor's internal shared secrets so they are DETERMINISTIC across
+        # every Argo CD render. Left empty, the chart generates fresh random
+        # secrets on each `helm template`; every sync then rewrote these Secrets,
+        # churned the pods (checksum/secret annotations) and left jobservice's
+        # CORE_SECRET out of sync with the already-running core pod — hence the
+        # 401 "only internal service is allowed to call this API" crash-loop.
+        # Demo values (fixed lengths required): use an existingSecret + a sealed
+        # secret in production rather than committing these in git.
+        secretKey: "harbordemokey123"          # exactly 16 chars (data-encryption key)
+        core:
+          secret: "harborcoresecret"           # 16 chars — core<->components shared secret
+          xsrfKey: "harborcsrfkey0123456789abcdef012"  # exactly 32 chars — CSRF key
+        jobservice:
+          secret: "harborjobsvc0123"           # 16 chars
+        registry:
+          secret: "harborregistry12"           # 16 chars
+
         # Persist registry/db/redis/jobservice/trivy on the default storage class
         # (rancher local-path) so data survives pod restarts.
         persistence:
