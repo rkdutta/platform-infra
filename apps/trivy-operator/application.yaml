@@ -29,6 +29,18 @@ spec:
         # public registry to prove the Architecture B gate.
         targetNamespaces: "trivy-demo"
 
+        # The node-collector runs one Job per node (pinned via nodeSelector to
+        # each node's hostname) to scan node config. On this kind cluster the
+        # control-plane node carries the standard
+        # node-role.kubernetes.io/control-plane:NoSchedule taint, which the
+        # collector didn't tolerate -> its Job sat Pending forever. Tolerate it
+        # so every node (control-plane included) gets scanned.
+        nodeCollector:
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+
   destination:
     server: https://kubernetes.default.svc
     namespace: trivy-system
