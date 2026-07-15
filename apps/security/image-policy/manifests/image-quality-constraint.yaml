@@ -1,0 +1,25 @@
+# REPORT-ONLY (audit): tenant workloads with critical CVEs or test coverage
+# below 90% are flagged non-compliant. Matches the tenant workload kind (Argo
+# Rollout) and the Pods it creates. dryrun => surfaced in audit / portal badges,
+# never blocks admission.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sImageQuality
+metadata:
+  name: tenant-cve-and-coverage
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  parameters:
+    maxCritical: 0
+    minCoverage: 90

@@ -26,6 +26,10 @@ spec:
       app: demo-api-go
   template:
     metadata:
+      annotations:
+        # Compliance facts seeded from supply-chain/evidence (demo-api 2.1.0).
+        platform.example.com/critical-cves: "0"
+        platform.example.com/test-coverage: "0"
       labels:
         app: demo-api-go
         app.kubernetes.io/name: demo-api-go

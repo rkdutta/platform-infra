@@ -25,6 +25,11 @@ spec:
       app: demo-api-py
   template:
     metadata:
+      annotations:
+        # Compliance facts seeded from supply-chain/evidence (demo-api-py 1.0.0):
+        # 2 critical CVEs -> non-compliant under the report-only quality gate.
+        platform.example.com/critical-cves: "2"
+        platform.example.com/test-coverage: "0"
       labels:
         app: demo-api-py
         app.kubernetes.io/name: demo-api-py

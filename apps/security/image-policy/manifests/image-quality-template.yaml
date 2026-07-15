@@ -1,0 +1,52 @@
+# REPORT-ONLY quality gate: a workload is non-compliant if its image carries
+# critical CVEs OR unit-test coverage below the threshold. Those two facts come
+# from the supply-chain evidence (trivy cosign-vuln + quality attestations) and
+# are surfaced on the workload as annotations:
+#     platform.example.com/critical-cves: "<int>"
+#     platform.example.com/test-coverage: "<percent>"
+# (In production a trusted mutating webhook injects these from the verified
+# attestations; here they are seeded from supply-chain/evidence.) Workloads with
+# no such annotation are left to the supply-chain-evidence constraint.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8simagequality
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sImageQuality
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            maxCritical:
+              type: integer
+            minCoverage:
+              type: number
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8simagequality
+
+        violation[{"msg": msg}] {
+          crit := critical_cves[_]
+          crit > input.parameters.maxCritical
+          msg := sprintf("image has %v critical CVE(s) (max allowed %v) — non-compliant", [crit, input.parameters.maxCritical])
+        }
+
+        violation[{"msg": msg}] {
+          cov := coverage[_]
+          cov < input.parameters.minCoverage
+          msg := sprintf("image test coverage is %v%% (minimum %v%%) — non-compliant", [cov, input.parameters.minCoverage])
+        }
+
+        # critical-CVE annotation, from a bare Pod or a workload pod-template
+        critical_cves[n] { n := to_number(input.review.object.metadata.annotations["platform.example.com/critical-cves"]) }
+        critical_cves[n] { n := to_number(input.review.object.spec.template.metadata.annotations["platform.example.com/critical-cves"]) }
+
+        # coverage annotation, from a bare Pod or a workload pod-template
+        coverage[n] { n := to_number(input.review.object.metadata.annotations["platform.example.com/test-coverage"]) }
+        coverage[n] { n := to_number(input.review.object.spec.template.metadata.annotations["platform.example.com/test-coverage"]) }

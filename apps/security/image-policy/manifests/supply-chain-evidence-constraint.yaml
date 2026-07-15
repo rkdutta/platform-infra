@@ -1,0 +1,24 @@
+# REPORT-ONLY (audit): tenant images without verifiable supply-chain evidence
+# are non-compliant. Reuses Ratify's RatifyVerification ConstraintTemplate
+# (installed by the ratify app) — its rego calls the ratify-provider external
+# data source, which verifies the cosign signature + SBOM/vuln/quality
+# attestations attached to each image. Missing/omitted evidence => violation.
+#
+# enforcementAction: dryrun -> surfaced in Gatekeeper audit + the portal
+# compliance badges, never blocks admission.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RatifyVerification
+metadata:
+  name: tenant-supply-chain-evidence
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
