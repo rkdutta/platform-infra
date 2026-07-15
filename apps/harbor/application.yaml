@@ -1,0 +1,77 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: harbor
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Harbor — an in-cluster OCI registry (project quotas, RBAC, built-in Trivy
+  # scanning + cosign/Notation signing & policy). Installed here as step 1:
+  # running in-cluster and reachable over the platform ingress. Wiring image
+  # pulls/verification (Ratify) to it is a follow-up.
+  source:
+    repoURL: https://helm.goharbor.io
+    chart: harbor
+    targetRevision: 1.19.1
+    helm:
+      releaseName: harbor
+      values: |
+        # Exposed via the shared nginx ingress at https://harbor.127.0.0.1.sslip.io:8443
+        # reusing the platform wildcard cert (*.127.0.0.1.sslip.io -> platform-tls).
+        expose:
+          type: ingress
+          tls:
+            enabled: true
+            certSource: secret
+            secret:
+              secretName: platform-tls
+          ingress:
+            hosts:
+              core: harbor.127.0.0.1.sslip.io
+            className: nginx
+            annotations:
+              # Registry pushes are large; nginx default body size (1m) is too small.
+              nginx.ingress.kubernetes.io/proxy-body-size: "0"
+              nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+        # Browser/docker-facing URL. Must include :8443 (the host port the kind
+        # ingress is mapped to) so the Docker token/redirect flow is correct.
+        externalURL: https://harbor.127.0.0.1.sslip.io:8443
+
+        # Default admin creds for the local demo — CHANGE THIS. Login: admin.
+        harborAdminPassword: "Harbor12345"
+
+        # Persist registry/db/redis/jobservice/trivy on the default storage class
+        # (rancher local-path) so data survives pod restarts.
+        persistence:
+          enabled: true
+
+        # Keep Harbor's built-in Trivy scanner (supply-chain theme); drop metrics
+        # to trim the footprint on the kind cluster.
+        trivy:
+          enabled: true
+        metrics:
+          enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: harbor
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
