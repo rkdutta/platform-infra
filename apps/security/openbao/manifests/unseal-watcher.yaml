@@ -1,0 +1,85 @@
+# Auto-unseal watcher for OpenBao.
+#
+# OpenBao uses the default Shamir seal and comes up SEALED on every pod restart.
+# This tiny sidecar-style Deployment polls the server and, whenever it reports
+# sealed, submits the threshold unseal keys read from the `openbao-unseal-keys`
+# Secret. That Secret is created out-of-band (it holds real key material and is
+# NOT in git — see bootstrap/README.md); the keys live only in the cluster.
+#
+# One-time `bao operator init` is a bootstrap step (also in the README); this
+# watcher handles the recurring unseal, not initialization.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openbao-unseal
+  namespace: openbao
+  labels:
+    app.kubernetes.io/name: openbao-unseal
+    app.kubernetes.io/part-of: openbao
+    plane: security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openbao-unseal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openbao-unseal
+        app.kubernetes.io/part-of: openbao
+    spec:
+      # Run as the image's non-root `openbao` user (uid 100 / gid 1000), matching
+      # the server pod — the image entrypoint would otherwise run as root and
+      # kubelet rejects it under runAsNonRoot.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Reuse the server image so the `bao` CLI is present and already cached on
+      # the node (no extra pull).
+      containers:
+        - name: unseal
+          image: quay.io/openbao/openbao:2.5.5
+          env:
+            - name: BAO_ADDR
+              value: http://openbao.openbao.svc:8200
+          envFrom:
+            - secretRef:
+                name: openbao-unseal-keys
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "openbao-unseal watcher starting; target $BAO_ADDR"
+              while true; do
+                if bao status >/dev/null 2>&1; then
+                  :                       # rc 0 -> already unsealed
+                else
+                  rc=$?
+                  if [ "$rc" = "2" ]; then # rc 2 -> sealed (rc 1 -> unreachable, skip)
+                    echo "$(date -u) sealed -> submitting unseal keys"
+                    for K in "$UNSEAL_KEY_1" "$UNSEAL_KEY_2" "$UNSEAL_KEY_3"; do
+                      bao operator unseal "$K" >/dev/null 2>&1 || true
+                    done
+                    if bao status >/dev/null 2>&1; then
+                      echo "$(date -u) unsealed OK"
+                    else
+                      echo "$(date -u) still sealed (keys stale? re-init may be needed)"
+                    fi
+                  fi
+                fi
+                sleep 15
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true

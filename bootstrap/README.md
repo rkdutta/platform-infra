@@ -40,6 +40,30 @@ kubectl get applications -n argocd -w
 # or the UI: http://argocd.127.0.0.1.sslip.io:8080
 ```
 
+## OpenBao — one-time init + auto-unseal keys
+
+OpenBao uses a Shamir seal, so it comes up **sealed** (and, on fresh storage,
+**uninitialized**). Initialize it once and create the Secret the auto-unseal
+watcher reads. Both key artifacts are git-ignored — keys never enter the repo.
+
+```sh
+# Initialize (5 shares / threshold 3). Save the JSON somewhere safe.
+kubectl -n openbao exec openbao-0 -- sh -c \
+  'BAO_ADDR=http://127.0.0.1:8200 bao operator init -key-shares=5 -key-threshold=3 -format=json' \
+  > init-keys.json
+
+# Create the unseal-keys Secret the watcher consumes (threshold = 3 keys).
+kubectl -n openbao create secret generic openbao-unseal-keys \
+  --from-literal=UNSEAL_KEY_1="$(jq -r '.unseal_keys_b64[0]' init-keys.json)" \
+  --from-literal=UNSEAL_KEY_2="$(jq -r '.unseal_keys_b64[1]' init-keys.json)" \
+  --from-literal=UNSEAL_KEY_3="$(jq -r '.unseal_keys_b64[2]' init-keys.json)"
+```
+
+From then on the `openbao-unseal` Deployment (GitOps-managed, in
+`apps/security/openbao/`) unseals the server automatically on every pod restart.
+A full **cluster/PVC recreate wipes OpenBao's storage** — re-run the two commands
+above (init produces new keys) when that happens.
+
 ## Rollout order (health-gated)
 
 Each wave must be **Synced and Healthy** before the next begins:

@@ -1,0 +1,36 @@
+# Argo CD Application for the OpenBao auto-unseal watcher (separate from the
+# helm-managed `openbao` app so the chart isn't touched). Same plane/project;
+# same wave as openbao so they converge together — the watcher unseals the
+# server, which lets the openbao app's readiness probe pass and go Healthy.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao-unseal
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+spec:
+  project: security
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/security/openbao/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openbao
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
