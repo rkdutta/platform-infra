@@ -1,0 +1,149 @@
+apiVersion: v1
+data:
+  report.json: |-
+    {
+      "localhost:5001/demo-api:2.1.0": {
+        "image": "localhost:5001/demo-api:2.1.0",
+        "digest": "sha256:95bc65e3a1cdbbf44cf13fce6e0ef85247d707fd28b1b6505bbcbc5ff8944318",
+        "checked_at": "2026-07-15T06:58:32.690841+00:00",
+        "policies": [
+          {
+            "id": "signature",
+            "name": "Image signed (cosign)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "cosign signature verified"
+          },
+          {
+            "id": "sbom",
+            "name": "SBOM attached (CycloneDX)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "CycloneDX attestation verified"
+          },
+          {
+            "id": "cve",
+            "name": "No critical CVEs",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "0 critical CVEs"
+          },
+          {
+            "id": "quality",
+            "name": "Quality checks passed",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "checks passed"
+          }
+        ]
+      },
+      "localhost:5001/demo-web:2.0.0": {
+        "image": "localhost:5001/demo-web:2.0.0",
+        "digest": "sha256:2b4ff47542136060b2d140fbd3c39ebcc9676a1fa20fbfb6aeede34a13e8594e",
+        "checked_at": "2026-07-15T06:58:33.313973+00:00",
+        "policies": [
+          {
+            "id": "signature",
+            "name": "Image signed (cosign)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "cosign signature verified"
+          },
+          {
+            "id": "sbom",
+            "name": "SBOM attached (CycloneDX)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "CycloneDX attestation verified"
+          },
+          {
+            "id": "cve",
+            "name": "No critical CVEs",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "0 critical CVEs"
+          },
+          {
+            "id": "quality",
+            "name": "Quality checks passed",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "checks passed"
+          }
+        ]
+      },
+      "localhost:5001/demo-api-py:1.0.0": {
+        "image": "localhost:5001/demo-api-py:1.0.0",
+        "digest": "sha256:9d3a928b5f76078197d719ace1e9712082db73cfd59ff1f32651504ffcf6479e",
+        "checked_at": "2026-07-15T06:58:34.106731+00:00",
+        "policies": [
+          {
+            "id": "signature",
+            "name": "Image signed (cosign)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "cosign signature verified"
+          },
+          {
+            "id": "sbom",
+            "name": "SBOM attached (CycloneDX)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "CycloneDX attestation verified"
+          },
+          {
+            "id": "cve",
+            "name": "No critical CVEs",
+            "category": "supply-chain",
+            "compliant": false,
+            "detail": "2 critical CVE(s)"
+          },
+          {
+            "id": "quality",
+            "name": "Quality checks passed",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "checks passed"
+          }
+        ]
+      },
+      "localhost:5001/demo-web-py:2.0.0": {
+        "image": "localhost:5001/demo-web-py:2.0.0",
+        "digest": "sha256:afbc28f70d2b83e96bc19dcb8358f482ac681953a72ef86280547eec494a0662",
+        "checked_at": "2026-07-15T06:58:34.932599+00:00",
+        "policies": [
+          {
+            "id": "signature",
+            "name": "Image signed (cosign)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "cosign signature verified"
+          },
+          {
+            "id": "sbom",
+            "name": "SBOM attached (CycloneDX)",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "CycloneDX attestation verified"
+          },
+          {
+            "id": "cve",
+            "name": "No critical CVEs",
+            "category": "supply-chain",
+            "compliant": false,
+            "detail": "2 critical CVE(s)"
+          },
+          {
+            "id": "quality",
+            "name": "Quality checks passed",
+            "category": "supply-chain",
+            "compliant": true,
+            "detail": "checks passed"
+          }
+        ]
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: app-compliance
+  namespace: engineering-platform
