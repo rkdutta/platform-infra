@@ -72,8 +72,13 @@ spec:
               API="http://harbor-core/api/v2.0"
               AUTH="admin:${HARBOR_ADMIN_PASSWORD}"
 
-              # First numeric "id" from a name-filtered (single-object) response.
-              first_id() { grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*' || true; }
+              # Registry response: fields serialize alphabetically and no nested
+              # object carries an id before it, so the first "id" is the registry.
+              first_id() { grep -o '"id":[0-9]\{1,\}' | head -1 | tr -dc '0-9' || true; }
+              # Policy response: the nested dest_registry.id:0 (local "Local")
+              # sorts before the policy's own id, so anchor on the unique policy
+              # name — "id":N,"name":"ghcr-demo-api" are adjacent.
+              pol_id_of() { grep -o '"id":[0-9]\{1,\},"name":"ghcr-demo-api"' | head -1 | tr -dc '0-9' || true; }
 
               echo "waiting for the Harbor API..."
               i=0
@@ -105,19 +110,24 @@ spec:
               echo "ghcr registry id=$reg_id"
 
               # 2) pull replication policy (create or update)
-              pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | first_id)
+              pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | pol_id_of)
               if [ -z "$pol_id" ]; then
                 echo "creating replication policy ghcr-demo-api"
                 pol_body "$reg_id" | curl -sf -u "$AUTH" -X POST "$API/replication/policies" -H 'Content-Type: application/json' -d @-
-                pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | first_id)
+                pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | pol_id_of)
               else
                 echo "replication policy exists (id=$pol_id); updating"
                 pol_body "$reg_id" | curl -sf -u "$AUTH" -X PUT "$API/replication/policies/$pol_id" -H 'Content-Type: application/json' -d @-
               fi
               echo "replication policy id=$pol_id"
 
-              # 3) kick off an immediate run (don't fail if one is already running)
-              echo "triggering an initial replication run"
-              printf '{"policy_id":%s}' "$pol_id" | curl -s -u "$AUTH" -X POST "$API/replication/executions" -H 'Content-Type: application/json' -d @- || true
+              # 3) kick off an immediate run (only if we have a valid id; the
+              #    scheduled trigger runs regardless)
+              if [ -n "$pol_id" ] && [ "$pol_id" -gt 0 ] 2>/dev/null; then
+                echo "triggering an initial replication run"
+                printf '{"policy_id":%s}' "$pol_id" | curl -s -u "$AUTH" -X POST "$API/replication/executions" -H 'Content-Type: application/json' -d @- || true
+              else
+                echo "skipping immediate trigger (policy id unresolved: '$pol_id'); the scheduled run will sync"
+              fi
 
               echo "harbor GHCR replication configured."
