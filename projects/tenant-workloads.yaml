@@ -13,9 +13,9 @@ spec:
   description: Tenant landing zone — application workloads deployed onto the platform
   sourceRepos:
     - https://github.com/rkdutta/platform-infra.git
-    - https://github.com/rkdutta/demo-api.git
+    - https://github.com/rkdutta/demo-api-go.git
     - https://github.com/rkdutta/demo-api-py.git
-    - https://github.com/rkdutta/demo-web.git
+    - https://github.com/rkdutta/demo-web-go.git
     - https://github.com/rkdutta/demo-web-py.git
   destinations:
     - server: https://kubernetes.default.svc

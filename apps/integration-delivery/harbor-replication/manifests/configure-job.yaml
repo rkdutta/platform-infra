@@ -1,0 +1,123 @@
+# Idempotent Job that configures Harbor's GHCR pull-replication via the REST API.
+#
+# Run as an Argo CD PostSync hook with hook-delete-policy BeforeHookCreation, so
+# it is deleted+recreated (and thus re-runs) on every sync. That keeps Harbor's
+# replication config reconciled even after Harbor's DB is wiped on a cluster
+# rebuild. The script itself is also idempotent (create-or-update).
+#
+# What it configures:
+#   * a `ghcr` registry endpoint (type github-ghcr, basic auth = GH user + PAT)
+#   * a pull replication policy `ghcr-demo-api`:
+#       - source filter  rkdutta/demo-api, tag "**"  (tag ** carries the cosign
+#         sha256-<digest>.sig / .att artifacts — required for keyless verify)
+#       - dest namespace `platform`, flatten-all so it lands at platform/demo-api
+#         (matching demo-api-go/deploy/rollout.yaml)
+#       - scheduled every 10 minutes
+#   * one immediate replication run
+#
+# Uses curlimages/curl (curl + busybox, runs non-root, no package install) so the
+# hardened securityContext (non-root, read-only rootfs) holds. jq is avoided;
+# the few numeric ids are parsed from the small name-filtered JSON responses.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: harbor-configure-ghcr-replication
+  namespace: harbor
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  labels:
+    app: harbor-replication
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: harbor-replication
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: configure
+          image: curlimages/curl:8.11.1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: HARBOR_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ghcr-replication-credentials
+                  key: HARBOR_ADMIN_PASSWORD
+            - name: GHCR_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ghcr-replication-credentials
+                  key: GHCR_USERNAME
+            - name: GHCR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ghcr-replication-credentials
+                  key: GHCR_TOKEN
+          command: ["/bin/sh", "-eu", "-c"]
+          args:
+            - |
+              API="http://harbor-core/api/v2.0"
+              AUTH="admin:${HARBOR_ADMIN_PASSWORD}"
+
+              # First numeric "id" from a name-filtered (single-object) response.
+              first_id() { grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*' || true; }
+
+              echo "waiting for the Harbor API..."
+              i=0
+              while [ "$i" -lt 30 ]; do
+                code=$(curl -s -o /dev/null -w '%{http_code}' -u "$AUTH" "$API/systeminfo" || true)
+                if [ "$code" = "200" ]; then echo "harbor ready"; break; fi
+                i=$((i+1)); echo "  not ready ($code), retry $i/30"; sleep 5
+              done
+
+              reg_body() {
+                printf '{"name":"ghcr","type":"github-ghcr","url":"https://ghcr.io","insecure":false,"credential":{"type":"basic","access_key":"%s","access_secret":"%s"}}' \
+                  "$GHCR_USERNAME" "$GHCR_TOKEN"
+              }
+              pol_body() {
+                printf '{"name":"ghcr-demo-api","description":"Pull demo-api image + cosign sig/att from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/demo-api"},{"type":"tag","value":"**"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
+                  "$1"
+              }
+
+              # 1) GHCR registry endpoint (create or update credentials)
+              reg_id=$(curl -s -u "$AUTH" "$API/registries?name=ghcr" | first_id)
+              if [ -z "$reg_id" ]; then
+                echo "creating ghcr registry endpoint"
+                reg_body | curl -sf -u "$AUTH" -X POST "$API/registries" -H 'Content-Type: application/json' -d @-
+                reg_id=$(curl -s -u "$AUTH" "$API/registries?name=ghcr" | first_id)
+              else
+                echo "ghcr registry exists (id=$reg_id); refreshing credentials"
+                reg_body | curl -sf -u "$AUTH" -X PUT "$API/registries/$reg_id" -H 'Content-Type: application/json' -d @-
+              fi
+              echo "ghcr registry id=$reg_id"
+
+              # 2) pull replication policy (create or update)
+              pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | first_id)
+              if [ -z "$pol_id" ]; then
+                echo "creating replication policy ghcr-demo-api"
+                pol_body "$reg_id" | curl -sf -u "$AUTH" -X POST "$API/replication/policies" -H 'Content-Type: application/json' -d @-
+                pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | first_id)
+              else
+                echo "replication policy exists (id=$pol_id); updating"
+                pol_body "$reg_id" | curl -sf -u "$AUTH" -X PUT "$API/replication/policies/$pol_id" -H 'Content-Type: application/json' -d @-
+              fi
+              echo "replication policy id=$pol_id"
+
+              # 3) kick off an immediate run (don't fail if one is already running)
+              echo "triggering an initial replication run"
+              printf '{"policy_id":%s}' "$pol_id" | curl -s -u "$AUTH" -X POST "$API/replication/executions" -H 'Content-Type: application/json' -d @- || true
+
+              echo "harbor GHCR replication configured."

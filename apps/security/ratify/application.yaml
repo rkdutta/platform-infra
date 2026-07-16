@@ -47,14 +47,30 @@ spec:
         notation:
           enabled: false
 
-        # Trusted cosign public key (supply-chain/keys/cosign.pub). The chart
-        # turns this into a KeyManagementProvider + cosign Verifier.
-        cosignKeys:
-          - |
-            -----BEGIN PUBLIC KEY-----
-            MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsE47KmxlrW2HXl3ryIn3jOH6KqXb
-            O2qJ1R3MZYfYpnQDFjq0jHv5bFAYA2Lqq97ZxFDc5AykjyAWMT51rPNM/A==
-            -----END PUBLIC KEY-----
+        # KEYLESS (Sigstore/OIDC) cosign verification. Instead of trusting a
+        # fixed public key, trust images whose cosign signature carries a Fulcio
+        # certificate issued to the demo-api-go RELEASE WORKFLOW's OIDC identity
+        # and logged in Rekor. This matches the keyless signing in that repo's
+        # .github/workflows/release.yml. Leaving cosignKeys empty makes the chart
+        # build a keyless trust policy (from cosign.keyless) rather than a
+        # key-based one.
+        #
+        # NOTE: keyless verification requires the Ratify pod to reach the public
+        # Sigstore infra (Fulcio root via TUF + Rekor) and requires the cosign
+        # signature artifact to live alongside the image in the registry Ratify
+        # pulls from (use `cosign copy` if the image is mirrored across
+        # registries).
+        cosignKeys: []
+        cosign:
+          enabled: true
+          scopes: ["*"]
+          tLogVerify: true          # require a Rekor transparency-log entry
+          keyless:
+            ctLogVerify: true
+            # main pushes and v* tags yield different cert identity refs, so
+            # match both with a RegExp (RE2). Issuer is the GitHub Actions OIDC.
+            certificateIdentityRegExp: '^https://github\.com/rkdutta/demo-api-go/\.github/workflows/release\.yml@refs/(heads/main|tags/v.*)$'
+            certificateOIDCIssuer: 'https://token.actions.githubusercontent.com'
   destination:
     server: https://kubernetes.default.svc
     namespace: gatekeeper-system

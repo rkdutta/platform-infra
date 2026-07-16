@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: harbor-replication
+  namespace: argocd
+  annotations:
+    # Runs after Harbor (wave 2) is Synced AND Healthy, so the config Job can
+    # reach the Harbor API.
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: integration-delivery
+spec:
+  project: integration-delivery
+  # Configures Harbor to PULL-replicate demo-api (image + cosign signature and
+  # attestations) from GHCR into the `platform` project, on a schedule. Harbor's
+  # replication rules live in its DB, not the Helm chart, so a small idempotent
+  # Job drives the Harbor REST API (see manifests/configure-job.yaml).
+  #
+  # PREREQUISITE (created out-of-band, git-ignored — see ghcr-credentials.example.yaml):
+  #   kubectl -n harbor create secret generic ghcr-replication-credentials \
+  #     --from-literal=GHCR_USERNAME=<github-user> \
+  #     --from-literal=GHCR_TOKEN=<PAT with read:packages> \
+  #     --from-literal=HARBOR_ADMIN_PASSWORD=Harbor12345
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/integration-delivery/harbor-replication/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: harbor
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

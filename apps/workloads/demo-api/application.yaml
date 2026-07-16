@@ -18,7 +18,7 @@ spec:
   # container image is pulled separately from the kind local registry
   # (localhost:5001/demo-api). This Application only references the manifests.
   source:
-    repoURL: https://github.com/rkdutta/demo-api.git
+    repoURL: https://github.com/rkdutta/demo-api-go.git
     targetRevision: main
     path: deploy
   destination:
