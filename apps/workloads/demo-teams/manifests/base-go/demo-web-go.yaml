@@ -1,7 +1,7 @@
 # demo-web-go — the web tier of the Go 3-tier demo, as a blue/green Rollout.
 # Part of the "demo-go" application card (separate from the Python "demo-py"
 # card). Named demo-web-go so the card + Rollouts dashboard match; the image repo
-# stays localhost:5001/demo-web (unchanged, still signed).
+# is harbor.127.0.0.1.sslip.io/platform/demo-web-go (signed).
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -22,7 +22,7 @@ spec:
   template:
     metadata:
       annotations:
-        # Compliance facts seeded from supply-chain/evidence (demo-web 2.0.0).
+        # Compliance facts seeded from supply-chain/evidence (demo-web-go 2.0.0).
         platform.example.com/critical-cves: "0"
         platform.example.com/test-coverage: "0"
       labels:
@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: demo-web-go
-          image: harbor.127.0.0.1.sslip.io/platform/demo-web:2.0.0
+          image: harbor.127.0.0.1.sslip.io/platform/demo-web-go:2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

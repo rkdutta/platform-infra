@@ -8,9 +8,9 @@
 # What it configures:
 #   * a `ghcr` registry endpoint (type github-ghcr, basic auth = GH user + PAT)
 #   * a pull replication policy `ghcr-demo-api`:
-#       - source filter  rkdutta/demo-api, tag "**"  (tag ** carries the cosign
+#       - source filter  rkdutta/demo-api-go, tag "**"  (tag ** carries the cosign
 #         sha256-<digest>.sig / .att artifacts — required for keyless verify)
-#       - dest namespace `platform`, flatten-all so it lands at platform/demo-api
+#       - dest namespace `platform`, flatten-all so it lands at platform/demo-api-go
 #         (matching demo-api-go/deploy/rollout.yaml)
 #       - scheduled every 10 minutes
 #   * one immediate replication run
@@ -93,7 +93,7 @@ spec:
                   "$GHCR_USERNAME" "$GHCR_TOKEN"
               }
               pol_body() {
-                printf '{"name":"ghcr-demo-api","description":"Pull demo-api image + cosign sig/att from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/demo-api"},{"type":"tag","value":"**"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
+                printf '{"name":"ghcr-demo-api","description":"Pull demo-api-go image + cosign sig/att from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/demo-api-go"},{"type":"tag","value":"**"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
                   "$1"
               }
 
