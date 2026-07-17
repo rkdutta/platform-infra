@@ -1,0 +1,60 @@
+# "demo-go" combination — the Go 3-tier demo (demo-api-go + demo-web-go).
+#
+# platform-infra stays STATIC: this ApplicationSet is just a pointer. The actual
+# Kubernetes manifests live in each application's own repo (…/deploy), so app
+# owners change their deployment without touching platform-infra.
+#
+# The list generator produces one Argo Application per app
+# (demo-go-demo-api-go, demo-go-demo-web-go), each sourcing <repo>//deploy and
+# deployed into the tenant namespace. The app-repo manifests are namespace-
+# agnostic (blue/green Rollout + active/preview Services + Ingress), so Argo
+# places them into destination.namespace. The team namespace is created by the
+# teams-operator, so there is no CreateNamespace here — the team must exist first.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: demo-go
+  namespace: argocd
+  labels:
+    plane: workloads
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - app: demo-api-go
+            repoURL: https://github.com/rkdutta/demo-api-go.git
+          - app: demo-web-go
+            repoURL: https://github.com/rkdutta/demo-web-go.git
+  template:
+    metadata:
+      name: 'demo-go-{{.app}}'
+      labels:
+        plane: workloads
+        app.kubernetes.io/part-of: demo-go
+      annotations:
+        argocd.argoproj.io/sync-wave: "5"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: tenant-workloads
+      source:
+        repoURL: '{{.repoURL}}'
+        targetRevision: main
+        path: deploy
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: team-sss
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
