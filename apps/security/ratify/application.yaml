@@ -88,6 +88,17 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: gatekeeper-system
+  # The ratify-harbor-trust hook Job (apps/security/ratify/manifests) mounts the
+  # Harbor CA into this Deployment; ignore those fields so self-heal doesn't
+  # strip the volume/mount the Job adds.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: ratify
+      namespace: gatekeeper-system
+      jsonPointers:
+        - /spec/template/spec/volumes
+        - /spec/template/spec/containers/0/volumeMounts
   syncPolicy:
     automated:
       prune: true

@@ -1,0 +1,132 @@
+# Makes Ratify (a pod) able to verify Harbor-hosted images entirely in-cluster.
+#
+# Problem: image refs are harbor.127.0.0.1.sslip.io/... which resolves to
+# 127.0.0.1 (the pod's own loopback) from inside a pod, and Harbor serves HTTPS
+# with a self-signed cert. So Ratify can't pull the image + attestations.
+#
+# This PostSync-hook Job (idempotent, re-runs every sync so it survives a cluster
+# rebuild) wires three things the Helm chart can't express:
+#   1. copies Harbor's platform-tls cert into a `harbor-ca` secret so Ratify can
+#      trust it (the chart already sets SSL_CERT_DIR=/etc/ratify-ca via values);
+#   2. adds a CoreDNS rewrite so harbor.127.0.0.1.sslip.io -> the in-cluster
+#      ingress (Ratify then reaches Harbor over the ingress, matching cert + the
+#      HTTPS token realm);
+#   3. mounts the CA into the Ratify Deployment.
+# The ratify app carries ignoreDifferences for the volume/mount so self-heal
+# leaves the Job's patch in place.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ratify-harbor-trust
+  namespace: gatekeeper-system
+  labels:
+    app: ratify-harbor-trust
+---
+# Privileged by necessity: reads Harbor's TLS secret, writes the CA secret,
+# edits the CoreDNS ConfigMap, and patches the Ratify + CoreDNS Deployments.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ratify-harbor-trust
+  labels:
+    app: ratify-harbor-trust
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ratify-harbor-trust
+  labels:
+    app: ratify-harbor-trust
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ratify-harbor-trust
+subjects:
+  - kind: ServiceAccount
+    name: ratify-harbor-trust
+    namespace: gatekeeper-system
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ratify-harbor-trust
+  namespace: gatekeeper-system
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  labels:
+    app: ratify-harbor-trust
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: ratify-harbor-trust
+    spec:
+      serviceAccountName: ratify-harbor-trust
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      containers:
+        - name: configure
+          image: alpine/k8s:1.31.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          command: ["/bin/bash", "-eu", "-c"]
+          args:
+            - |
+              echo "1) copy platform-tls -> harbor-ca (ca.crt) in gatekeeper-system"
+              CA=$(kubectl -n harbor get secret platform-tls -o go-template='{{index .data "tls.crt"}}')
+              kubectl apply -f - <<EOF
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: harbor-ca
+                namespace: gatekeeper-system
+              type: Opaque
+              data:
+                ca.crt: ${CA}
+              EOF
+
+              echo "2) CoreDNS rewrite harbor.127.0.0.1.sslip.io -> ingress (idempotent)"
+              cf=$(kubectl -n kube-system get cm coredns -o go-template='{{.data.Corefile}}')
+              if printf '%s' "$cf" | grep -q 'rewrite name harbor.127.0.0.1.sslip.io'; then
+                echo "   already present"
+              else
+                newcf=$(printf '%s\n' "$cf" | awk '{print} /^[[:space:]]*ready[[:space:]]*$/ && !d {print "    rewrite name harbor.127.0.0.1.sslip.io ingress-nginx-controller.ingress-nginx.svc.cluster.local"; d=1}')
+                kubectl -n kube-system create cm coredns --from-literal=Corefile="$newcf" --dry-run=client -o yaml | kubectl apply -f -
+                kubectl -n kube-system rollout restart deploy coredns
+                echo "   rewrite added"
+              fi
+
+              echo "3) mount harbor-ca into the ratify Deployment (idempotent)"
+              kubectl -n gatekeeper-system patch deploy ratify --type=strategic -p \
+                '{"spec":{"template":{"spec":{"volumes":[{"name":"harbor-ca","secret":{"secretName":"harbor-ca"}}],"containers":[{"name":"ratify","volumeMounts":[{"name":"harbor-ca","mountPath":"/etc/ratify-ca","readOnly":true}]}]}}}}'
+
+              echo "ratify Harbor trust configured."
