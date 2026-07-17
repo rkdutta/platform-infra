@@ -7,14 +7,16 @@
 #
 # What it configures:
 #   * a `ghcr` registry endpoint (type github-ghcr, basic auth = GH user + PAT)
-#   * one pull replication policy per Go app repo (the github-ghcr adapter needs
+#   * one pull replication policy per app repo (the github-ghcr adapter needs
 #     an exact repo name — no wildcards), named ghcr-<repo>:
 #       - ghcr-demo-api-go  -> rkdutta/demo-api-go
 #       - ghcr-demo-web-go  -> rkdutta/demo-web-go
+#       - ghcr-demo-api-py  -> rkdutta/demo-api-py
+#       - ghcr-demo-web-py  -> rkdutta/demo-web-py
 #     Each: tag "**" (carries the cosign sha256-<digest>.sig / .att artifacts —
 #     required for keyless verify), dest namespace `platform`, flatten-all so
-#     they land at platform/demo-api-go and platform/demo-web-go (matching the
-#     deploy manifests the demo-go ApplicationSet reads).
+#     they land at platform/<repo> (matching the deploy manifests the demo-go
+#     and demo-py ApplicationSets read).
 #       - scheduled every 10 minutes
 #   * one immediate replication run
 #
@@ -113,9 +115,9 @@ spec:
               fi
               echo "ghcr registry id=$reg_id"
 
-              # 2) one pull policy per Go app repo. The github-ghcr adapter needs
+              # 2) one pull policy per app repo. The github-ghcr adapter needs
               #    an exact repository name (no wildcards), so we iterate.
-              for repo in demo-api-go demo-web-go; do
+              for repo in demo-api-go demo-web-go demo-api-py demo-web-py; do
                 polname="ghcr-$repo"
                 pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
                 if [ -z "$pol_id" ]; then
