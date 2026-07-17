@@ -39,8 +39,19 @@ spec:
           enableMutation: false
 
         # The kind local registry is plain HTTP.
+        # Harbor is HTTPS via the in-cluster ingress (CoreDNS rewrites
+        # harbor.127.0.0.1.sslip.io -> ingress-nginx). Ratify trusts Harbor's
+        # self-signed platform-tls CA via SSL_CERT_DIR below.
         oras:
-          useHttp: true
+          useHttp: false
+
+        # Add the mounted platform-tls CA (/etc/ratify-ca) on top of the image's
+        # built-in public roots, so oras pulls Harbor over HTTPS AND cosign can
+        # still reach public Sigstore infra (Rekor/Fulcio/TUF). The CA volume +
+        # mount are added by the kustomize patch (this app is helm+kustomize).
+        env:
+          - name: SSL_CERT_DIR
+            value: /etc/ratify-ca
 
         # This demo verifies cosign signatures only; disable the Notation
         # verifier so cosign-signed (but not notation-signed) images pass.
@@ -69,7 +80,10 @@ spec:
             ctLogVerify: true
             # main pushes and v* tags yield different cert identity refs, so
             # match both with a RegExp (RE2). Issuer is the GitHub Actions OIDC.
-            certificateIdentityRegExp: '^https://github\.com/rkdutta/demo-api-go/\.github/workflows/release\.yml@refs/(heads/main|tags/v.*)$'
+            # Any rkdutta repo's release.yml workflow (demo-api-go, demo-web-go,
+            # and future apps) on main or a v* tag. Trust boundary = our org's
+            # release pipelines, not a single repo.
+            certificateIdentityRegExp: '^https://github\.com/rkdutta/[^/]+/\.github/workflows/release\.yml@refs/(heads/main|tags/v.*)$'
             certificateOIDCIssuer: 'https://token.actions.githubusercontent.com'
   destination:
     server: https://kubernetes.default.svc
