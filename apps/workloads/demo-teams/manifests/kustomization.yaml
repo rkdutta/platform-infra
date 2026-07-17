@@ -1,8 +1,0 @@
-# Aggregates every team's demo-app overlay into one Argo CD Application source.
-# To give another team the demo apps: create a `team-<name>/kustomization.yaml`
-# overlay (namespace: team-<name>, resources: ../base) and add it here.
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - team-ddd
-  - team-sss

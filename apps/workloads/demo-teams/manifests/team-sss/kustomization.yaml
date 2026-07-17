@@ -1,9 +1,0 @@
-# Deploy the Python "demo" apps (../base) into team "sss"'s namespace.
-# The Go "demo-go" apps (demo-api-go, demo-web-go) are delivered separately by
-# the demo-go ApplicationSet (apps/workloads/demo-go/), which sources their
-# manifests directly from the application repos.
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: team-sss
-resources:
-  - ../base

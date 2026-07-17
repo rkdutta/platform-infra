@@ -33,7 +33,7 @@ spec:
       # Render ONLY the child Application manifests, not the raw workload
       # manifests under apps/<plane>/<app>/manifests/. Every Argo Application
       # file is named *application.yaml; nothing under manifests/ is.
-      include: '{**/application.yaml,**/*-application.yaml}'
+      include: '{**/applicationset.yaml,**/application.yaml,**/*-application.yaml}'
 
   destination:
     server: https://kubernetes.default.svc

@@ -1,0 +1,67 @@
+# "demo-py" combination — the Python 3-tier demo (demo-api-py + demo-web-py).
+#
+# Same static-pointer pattern as demo-go: the manifests live in each app repo
+# (…/deploy); platform-infra only holds this ApplicationSet.
+#
+# The Python apps run in MULTIPLE team namespaces (team-ddd + team-sss), so this
+# uses a matrix generator = {apps} × {teams}, producing one Application per
+# (app, team): demo-py-demo-api-py-team-ddd, …-team-sss, demo-py-demo-web-py-*.
+# The app-repo manifests are namespace-agnostic, so Argo places them into the
+# per-Application destination.namespace. Team namespaces are created by the
+# teams-operator (no CreateNamespace here — the team must exist first).
+#
+# To onboard another team to the demo apps, add one line to the teams list.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: demo-py
+  namespace: argocd
+  labels:
+    plane: workloads
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - app: demo-api-py
+                  repoURL: https://github.com/rkdutta/demo-api-py.git
+                - app: demo-web-py
+                  repoURL: https://github.com/rkdutta/demo-web-py.git
+          - list:
+              elements:
+                - team: team-ddd
+                - team: team-sss
+  template:
+    metadata:
+      name: 'demo-py-{{.app}}-{{.team}}'
+      labels:
+        plane: workloads
+        app.kubernetes.io/part-of: demo-py
+      annotations:
+        argocd.argoproj.io/sync-wave: "5"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: tenant-workloads
+      source:
+        repoURL: '{{.repoURL}}'
+        targetRevision: main
+        path: deploy
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.team}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
