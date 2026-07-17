@@ -7,11 +7,14 @@
 #
 # What it configures:
 #   * a `ghcr` registry endpoint (type github-ghcr, basic auth = GH user + PAT)
-#   * a pull replication policy `ghcr-demo-api`:
-#       - source filter  rkdutta/demo-api-go, tag "**"  (tag ** carries the cosign
-#         sha256-<digest>.sig / .att artifacts — required for keyless verify)
-#       - dest namespace `platform`, flatten-all so it lands at platform/demo-api-go
-#         (matching demo-api-go/deploy/rollout.yaml)
+#   * one pull replication policy per Go app repo (the github-ghcr adapter needs
+#     an exact repo name — no wildcards), named ghcr-<repo>:
+#       - ghcr-demo-api-go  -> rkdutta/demo-api-go
+#       - ghcr-demo-web-go  -> rkdutta/demo-web-go
+#     Each: tag "**" (carries the cosign sha256-<digest>.sig / .att artifacts —
+#     required for keyless verify), dest namespace `platform`, flatten-all so
+#     they land at platform/demo-api-go and platform/demo-web-go (matching the
+#     deploy manifests the demo-go ApplicationSet reads).
 #       - scheduled every 10 minutes
 #   * one immediate replication run
 #
@@ -75,10 +78,10 @@ spec:
               # Registry response: fields serialize alphabetically and no nested
               # object carries an id before it, so the first "id" is the registry.
               first_id() { grep -o '"id":[0-9]\{1,\}' | head -1 | tr -dc '0-9' || true; }
-              # Policy response: the nested dest_registry.id:0 (local "Local")
-              # sorts before the policy's own id, so anchor on the unique policy
-              # name — "id":N,"name":"ghcr-demo-api" are adjacent.
-              pol_id_of() { grep -o '"id":[0-9]\{1,\},"name":"ghcr-demo-api"' | head -1 | tr -dc '0-9' || true; }
+              # Policy id: the nested dest_registry.id:0 (local "Local") sorts
+              # before the policy's own id, so anchor on the (unique) policy name.
+              # $1 = policy name; reads the JSON list on stdin.
+              pol_id_of() { grep -o "\"id\":[0-9]\{1,\},\"name\":\"$1\"" | head -1 | tr -dc '0-9' || true; }
 
               echo "waiting for the Harbor API..."
               i=0
@@ -92,9 +95,10 @@ spec:
                 printf '{"name":"ghcr","type":"github-ghcr","url":"https://ghcr.io","insecure":false,"credential":{"type":"basic","access_key":"%s","access_secret":"%s"}}' \
                   "$GHCR_USERNAME" "$GHCR_TOKEN"
               }
+              # $1 = policy name, $2 = ghcr repo (pulled as rkdutta/$2), $3 = registry id.
               pol_body() {
-                printf '{"name":"ghcr-demo-api","description":"Pull demo-api-go image + cosign sig/att from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/demo-api-go"},{"type":"tag","value":"**"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
-                  "$1"
+                printf '{"name":"%s","description":"Pull %s (+cosign sig/att) from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/%s"},{"type":"tag","value":"**"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
+                  "$1" "$2" "$3" "$2"
               }
 
               # 1) GHCR registry endpoint (create or update credentials)
@@ -109,25 +113,28 @@ spec:
               fi
               echo "ghcr registry id=$reg_id"
 
-              # 2) pull replication policy (create or update)
-              pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | pol_id_of)
-              if [ -z "$pol_id" ]; then
-                echo "creating replication policy ghcr-demo-api"
-                pol_body "$reg_id" | curl -sf -u "$AUTH" -X POST "$API/replication/policies" -H 'Content-Type: application/json' -d @-
-                pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=ghcr-demo-api" | pol_id_of)
-              else
-                echo "replication policy exists (id=$pol_id); updating"
-                pol_body "$reg_id" | curl -sf -u "$AUTH" -X PUT "$API/replication/policies/$pol_id" -H 'Content-Type: application/json' -d @-
-              fi
-              echo "replication policy id=$pol_id"
+              # 2) one pull policy per Go app repo. The github-ghcr adapter needs
+              #    an exact repository name (no wildcards), so we iterate.
+              for repo in demo-api-go demo-web-go; do
+                polname="ghcr-$repo"
+                pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
+                if [ -z "$pol_id" ]; then
+                  echo "creating replication policy $polname"
+                  pol_body "$polname" "$repo" "$reg_id" | curl -sf -u "$AUTH" -X POST "$API/replication/policies" -H 'Content-Type: application/json' -d @-
+                  pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
+                else
+                  echo "$polname exists (id=$pol_id); updating"
+                  pol_body "$polname" "$repo" "$reg_id" | curl -sf -u "$AUTH" -X PUT "$API/replication/policies/$pol_id" -H 'Content-Type: application/json' -d @-
+                fi
+                echo "$polname id=$pol_id"
 
-              # 3) kick off an immediate run (only if we have a valid id; the
-              #    scheduled trigger runs regardless)
-              if [ -n "$pol_id" ] && [ "$pol_id" -gt 0 ] 2>/dev/null; then
-                echo "triggering an initial replication run"
-                printf '{"policy_id":%s}' "$pol_id" | curl -s -u "$AUTH" -X POST "$API/replication/executions" -H 'Content-Type: application/json' -d @- || true
-              else
-                echo "skipping immediate trigger (policy id unresolved: '$pol_id'); the scheduled run will sync"
-              fi
+                # 3) kick off an immediate run (the scheduled trigger runs anyway)
+                if [ -n "$pol_id" ] && [ "$pol_id" -gt 0 ] 2>/dev/null; then
+                  echo "triggering $polname"
+                  printf '{"policy_id":%s}' "$pol_id" | curl -s -u "$AUTH" -X POST "$API/replication/executions" -H 'Content-Type: application/json' -d @- || true
+                else
+                  echo "skipping immediate trigger for $polname (id unresolved: '$pol_id')"
+                fi
+              done
 
               echo "harbor GHCR replication configured."
