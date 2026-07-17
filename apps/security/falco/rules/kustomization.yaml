@@ -9,6 +9,7 @@ configMapGenerator:
   - name: falco-custom-rules
     files:
       - root-detect-rule.yaml
+      - shell-in-container-rule.yaml
 
 generatorOptions:
   # Keep a stable name so the Falco chart's volume can reference it. (With the
