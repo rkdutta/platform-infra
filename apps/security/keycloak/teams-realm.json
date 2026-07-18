@@ -123,6 +123,23 @@
       "groups": ["/team-mmm"]
     },
     {
+      "username": "viewer1",
+      "enabled": true,
+      "firstName": "Viewer",
+      "lastName": "One",
+      "email": "viewer1@company.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["viewer"],
+      "groups": ["/team-sss"]
+    },
+    {
       "username": "admin",
       "enabled": true,
       "firstName": "Admin",
@@ -144,6 +161,10 @@
       {
         "name": "team-leader",
         "description": "Can create and manage teams"
+      },
+      {
+        "name": "viewer",
+        "description": "Read-only access to teams/apps"
       },
       {
         "name": "admin",
