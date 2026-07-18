@@ -50,6 +50,12 @@ spec:
         runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        # Repo list, from the Kustomize-generated (hash-suffixed) ConfigMap.
+        # Kustomize rewrites this name to harbor-replication-repos-<hash>.
+        - name: repos
+          configMap:
+            name: harbor-replication-repos
       containers:
         - name: configure
           image: curlimages/curl:8.11.1
@@ -58,6 +64,10 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: repos
+              mountPath: /config
+              readOnly: true
           env:
             - name: HARBOR_ADMIN_PASSWORD
               valueFrom:
@@ -119,11 +129,14 @@ spec:
               echo "ghcr registry id=$reg_id"
 
               # 2) one pull policy per app repo. The github-ghcr adapter needs
-              #    an exact repository name (no wildcards), so we iterate.
+              #    an exact repository name (no wildcards), so we iterate. The
+              #    list lives in repos.txt, mounted at /config from a Kustomize
+              #    hash-suffixed ConfigMap — editing repos.txt changes the
+              #    ConfigMap name, which Argo sees as drift and syncs, re-running
+              #    this PostSync hook so new repos reconcile automatically.
               #    demo-* = the demo workloads; teams-* = the team-management
               #    platform components (built by the platform-idp release.yml).
-              for repo in demo-api-go demo-web-go demo-api-py demo-web-py \
-                          teams-app teams-api teams-operator; do
+              for repo in $(cat /config/repos.txt); do
                 polname="ghcr-$repo"
                 pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
                 if [ -z "$pol_id" ]; then
