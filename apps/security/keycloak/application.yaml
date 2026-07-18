@@ -141,7 +141,21 @@ spec:
                       "protocol": "openid-connect",
                       "attributes": {
                         "post.logout.redirect.uris": "https://teams-ui.127.0.0.1.sslip.io:8443/*##http://teams-ui.127.0.0.1.sslip.io:8080/*##http://platform-auth.127.0.0.1.sslip.io/*##http://localhost:4200/*##http://localhost:4201/*##http://rdutta.coder:*"
-                      }
+                      },
+                      "protocolMappers": [
+                        {
+                          "name": "groups",
+                          "protocol": "openid-connect",
+                          "protocolMapper": "oidc-group-membership-mapper",
+                          "config": {
+                            "claim.name": "groups",
+                            "full.path": "false",
+                            "access.token.claim": "true",
+                            "id.token.claim": "true",
+                            "userinfo.token.claim": "true"
+                          }
+                        }
+                      ]
                     },
                     {
                       "clientId": "teams-cli",
@@ -162,7 +176,21 @@ spec:
                       "attributes": {
                         "pkce.code.challenge.method": "S256",
                         "post.logout.redirect.uris": "http://localhost:8400/*##http://127.0.0.1:8400/*"
-                      }
+                      },
+                      "protocolMappers": [
+                        {
+                          "name": "groups",
+                          "protocol": "openid-connect",
+                          "protocolMapper": "oidc-group-membership-mapper",
+                          "config": {
+                            "claim.name": "groups",
+                            "full.path": "false",
+                            "access.token.claim": "true",
+                            "id.token.claim": "true",
+                            "userinfo.token.claim": "true"
+                          }
+                        }
+                      ]
                     }
                   ],
                   "users": [
@@ -180,9 +208,25 @@ spec:
                           "temporary": false
                         }
                       ],
-                      "realmRoles": [
-                        "team-leader"
-                      ]
+                      "realmRoles": ["team-leader"],
+                      "groups": ["/team-sss"]
+                    },
+                    {
+                      "username": "teamlead2",
+                      "enabled": true,
+                      "firstName": "Team",
+                      "lastName": "Lead Two",
+                      "email": "teamlead2@company.com",
+                      "emailVerified": true,
+                      "credentials": [
+                        {
+                          "type": "password",
+                          "value": "password123",
+                          "temporary": false
+                        }
+                      ],
+                      "realmRoles": ["team-leader"],
+                      "groups": ["/team-mmm"]
                     },
                     {
                       "username": "admin",
@@ -198,10 +242,7 @@ spec:
                           "temporary": false
                         }
                       ],
-                      "realmRoles": [
-                        "admin",
-                        "team-leader"
-                      ]
+                      "realmRoles": ["admin", "team-leader"]
                     }
                   ],
                   "roles": {
@@ -215,9 +256,12 @@ spec:
                         "description": "Full administrative access"
                       }
                     ]
-                  }
+                  },
+                  "groups": [
+                    { "name": "team-sss" },
+                    { "name": "team-mmm" }
+                  ]
                 }
-
         extraVolumes: |
           - name: realm-import
             configMap:
