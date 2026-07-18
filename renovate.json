@@ -6,7 +6,6 @@
     ":dependencyDashboard"
   ],
   "labels": ["dependencies"],
-  "schedule": ["before 6am on monday"],
   "prHourlyLimit": 4,
   "enabledManagers": ["custom.regex"],
   "customManagers": [
