@@ -162,10 +162,53 @@ python teams_cli.py -k list
 
 Without `--insecure` you'll get a clear TLS error that points you to the flag.
 
+## Authentication (Login)
+
+The CLI logs in against Keycloak using the **OAuth 2.0 Authorization Code flow
+with PKCE** (public client `teams-cli`, no secret) and a loopback redirect
+(RFC 8252). `login` opens your browser to the Keycloak login page, catches the
+redirect on `http://localhost:8400/callback`, exchanges the code for tokens, and
+stores them at `~/.config/teams-cli/tokens.json` (mode `0600`). Subsequent
+commands automatically attach `Authorization: Bearer <token>` and refresh the
+token when it expires.
+
+```bash
+# Keycloak uses the self-signed platform cert, so pass -k on login too.
+python teams_cli.py -k login
+# → opens the browser; log in (e.g. teamlead1 / password123)
+# ✅ Logged in as teamlead1
+#    roles: ['team-leader']
+
+python teams_cli.py whoami      # show current user, roles, token expiry
+python teams_cli.py logout      # remove the stored token
+```
+
+Headless / no browser available:
+
+```bash
+python teams_cli.py -k login --no-browser   # prints the URL to open manually
+```
+
+Auth targets are configurable via environment (defaults shown):
+
+```bash
+export TEAMS_AUTH_URL="https://platform-auth.127.0.0.1.sslip.io:8443/auth"
+export TEAMS_AUTH_REALM="teams"
+export TEAMS_AUTH_CLIENT="teams-cli"
+export TEAMS_AUTH_REDIRECT_PORT="8400"   # must match a redirect URI on the client
+```
+
+> The `teams-cli` client is defined declaratively in the platform
+> (`apps/security/keycloak`) with PKCE (S256) required and the loopback redirect
+> URIs `http://localhost:8400/callback` and `http://127.0.0.1:8400/callback`.
+
 ## Command Reference
 
 | Command | Description | Example |
 |---------|-------------|---------|
+| `login` | Browser login (OAuth2 Auth Code + PKCE) | `python teams_cli.py -k login` |
+| `logout` | Remove the stored token | `python teams_cli.py logout` |
+| `whoami` | Show current user + token status | `python teams_cli.py whoami` |
 | `health` | Check API health | `python teams_cli.py health` |
 | `create NAME` | Create a new team | `python teams_cli.py create "My Team"` |
 | `list` | List all teams | `python teams_cli.py list` |
@@ -185,6 +228,10 @@ Without `--insecure` you'll get a clear TLS error that points you to the flag.
 | Variable | Description |
 |----------|-------------|
 | `TEAMS_API_URL` | Default API base URL when `--url` is not given |
+| `TEAMS_AUTH_URL` | Keycloak base URL (default `https://platform-auth.127.0.0.1.sslip.io:8443/auth`) |
+| `TEAMS_AUTH_REALM` | Keycloak realm (default `teams`) |
+| `TEAMS_AUTH_CLIENT` | OIDC client ID (default `teams-cli`) |
+| `TEAMS_AUTH_REDIRECT_PORT` | Loopback callback port (default `8400`) |
 
 ### Exit Codes
 

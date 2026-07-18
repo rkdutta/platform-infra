@@ -52,6 +52,19 @@ spec:
           value: "http"
         - name: PUBLIC_INGRESS_PORT
           value: "8080"
+        # --- JWT auth (Keycloak) -------------------------------------------
+        # Reject unauthenticated calls; validate Keycloak-issued access tokens
+        # (RS256) against the realm JWKS. The UI (client teams-ui) and CLI
+        # (client teams-cli) both issue tokens from this realm. JWKS is fetched
+        # over the in-cluster HTTP Service (no TLS hop); the issuer is the realm's
+        # public URL that appears in the token's `iss` claim. Set AUTH_ENABLED
+        # "false" to disable enforcement for troubleshooting.
+        - name: AUTH_ENABLED
+          value: "true"
+        - name: OIDC_ISSUER
+          value: "https://platform-auth.127.0.0.1.sslip.io:8443/auth/realms/teams"
+        - name: OIDC_JWKS_URL
+          value: "http://keycloak-keycloakx-http.keycloak.svc/auth/realms/teams/protocol/openid-connect/certs"
         # Own namespace, so the app-compliance ConfigMap (per-app supply-chain
         # report) is read from the right place for the compliance badges.
         - name: POD_NAMESPACE
