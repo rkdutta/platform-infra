@@ -191,6 +191,22 @@ spec:
                           }
                         }
                       ]
+                    },
+                    {
+                      "clientId": "teams-api-sa",
+                      "name": "Teams API service account",
+                      "description": "Confidential client used by teams-api to manage Keycloak groups/memberships via the Admin API (client-credentials grant). DEMO secret — rotate for real use.",
+                      "enabled": true,
+                      "protocol": "openid-connect",
+                      "publicClient": false,
+                      "clientAuthenticatorType": "client-secret",
+                      "secret": "dev-teams-api-sa-secret-change-me",
+                      "standardFlowEnabled": false,
+                      "directAccessGrantsEnabled": false,
+                      "implicitFlowEnabled": false,
+                      "serviceAccountsEnabled": true,
+                      "redirectUris": [],
+                      "webOrigins": []
                     }
                   ],
                   "users": [
@@ -260,6 +276,14 @@ spec:
                         }
                       ],
                       "realmRoles": ["admin", "team-leader"]
+                    },
+                    {
+                      "username": "service-account-teams-api-sa",
+                      "enabled": true,
+                      "serviceAccountClientId": "teams-api-sa",
+                      "clientRoles": {
+                        "realm-management": ["manage-users", "view-users", "query-users", "query-groups", "manage-realm"]
+                      }
                     }
                   ],
                   "roles": {
