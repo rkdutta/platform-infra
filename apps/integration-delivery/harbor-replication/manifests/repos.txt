@@ -1,0 +1,7 @@
+demo-api-go
+demo-web-go
+demo-api-py
+demo-web-py
+teams-app
+teams-api
+teams-operator

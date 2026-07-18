@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Keep everything in the Harbor namespace (matches the app destination + the
+# Job's own namespace, so the pod can mount the generated ConfigMap).
+namespace: harbor
+
+resources:
+  - configure-job.yaml
+
+# The GHCR->Harbor replication repo list lives in repos.txt and is rendered into
+# a HASH-SUFFIXED ConfigMap (harbor-replication-repos-<hash>), which the
+# configure Job (a PostSync hook) mounts at /config.
+#
+# Why this exists: the configure Job is an Argo CD *hook*, and hooks are excluded
+# from Argo's drift diff — so editing the Job (or an inline repo list) never
+# shows as OutOfSync and never triggers a sync. This ConfigMap is a NORMAL
+# tracked resource; because the hash suffix is left ON, editing repos.txt changes
+# the ConfigMap's name, which Argo sees as drift -> it runs a sync -> the PostSync
+# hook re-runs with the new list. That makes repo-list edits reconcile on their
+# own. Kustomize also rewrites the Job's volume reference to the hashed name.
+configMapGenerator:
+  - name: harbor-replication-repos
+    files:
+      - repos.txt
