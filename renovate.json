@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":dependencyDashboard"
+  ],
+  "labels": ["dependencies"],
+  "schedule": ["before 6am on monday"],
+  "prHourlyLimit": 4,
+  "enabledManagers": ["custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Bump the team-management Harbor image tags to the latest platform-idp release. Harbor (harbor.127.0.0.1.sslip.io) is a local, self-signed registry Renovate can't reach, so versions are resolved from the PUBLIC platform-idp git tags (the single unified vX.Y.Z release that builds all teams-* images) and rewritten into the Harbor image line.",
+      "managerFilePatterns": ["/^apps/developer-control/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "image:\\s+harbor\\.127\\.0\\.0\\.1\\.sslip\\.io/platform/(?<depName>teams-[a-z]+):(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-tags",
+      "packageNameTemplate": "rkdutta/platform-idp",
+      "extractVersionTemplate": "^v(?<version>.+)$",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "All three teams-* images share the unified version, so group them into one PR.",
+      "matchManagers": ["custom.regex"],
+      "groupName": "team-management images"
+    }
+  ]
+}
