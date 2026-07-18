@@ -13,6 +13,9 @@
 #       - ghcr-demo-web-go  -> rkdutta/demo-web-go
 #       - ghcr-demo-api-py  -> rkdutta/demo-api-py
 #       - ghcr-demo-web-py  -> rkdutta/demo-web-py
+#       - ghcr-teams-app    -> rkdutta/teams-app
+#       - ghcr-teams-api    -> rkdutta/teams-api
+#       - ghcr-teams-operator -> rkdutta/teams-operator
 #     Each: tag "**" (carries the cosign sha256-<digest>.sig / .att artifacts —
 #     required for keyless verify), dest namespace `platform`, flatten-all so
 #     they land at platform/<repo> (matching the deploy manifests the demo-go
@@ -117,7 +120,10 @@ spec:
 
               # 2) one pull policy per app repo. The github-ghcr adapter needs
               #    an exact repository name (no wildcards), so we iterate.
-              for repo in demo-api-go demo-web-go demo-api-py demo-web-py; do
+              #    demo-* = the demo workloads; teams-* = the team-management
+              #    platform components (built by the platform-idp release.yml).
+              for repo in demo-api-go demo-web-go demo-api-py demo-web-py \
+                          teams-app teams-api teams-operator; do
                 polname="ghcr-$repo"
                 pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
                 if [ -z "$pol_id" ]; then
