@@ -24,9 +24,12 @@
   ],
   "packageRules": [
     {
-      "description": "All three teams-* images share the unified version, so group them into one PR.",
+      "description": "All three teams-* images share the unified version, so group them into one PR and auto-merge it. This is the only manager enabled, so every Renovate PR in this repo is this group — auto-merging it removes the manual-merge toil after each platform-idp release. With no required status checks on this repo, Renovate merges as soon as the PR is opened; platformAutomerge lets it use GitHub's native auto-merge if branch protection is added later.",
       "matchManagers": ["custom.regex"],
-      "groupName": "team-management images"
+      "groupName": "team-management images",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
     }
   ]
 }
