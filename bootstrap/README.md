@@ -47,22 +47,59 @@ OpenBao uses a Shamir seal, so it comes up **sealed** (and, on fresh storage,
 watcher reads. Both key artifacts are git-ignored — keys never enter the repo.
 
 ```sh
-# Initialize (5 shares / threshold 3). Save the JSON somewhere safe.
+# Initialize (5 shares / threshold 3). Save the JSON somewhere safe — it also
+# contains the root token, which is your only admin credential.
 kubectl -n openbao exec openbao-0 -- sh -c \
   'BAO_ADDR=http://127.0.0.1:8200 bao operator init -key-shares=5 -key-threshold=3 -format=json' \
-  > init-keys.json
+  > bootstrap/init-keys.json   # already git-ignored (init-keys.json*)
+
+# Unseal now, interactively (needs 3 of the 5 keys) — the watcher below only
+# handles *future* seals, it doesn't do this first one for you.
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 bao operator unseal $(jq -r '.unseal_keys_b64[0]' bootstrap/init-keys.json)"
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 bao operator unseal $(jq -r '.unseal_keys_b64[1]' bootstrap/init-keys.json)"
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 bao operator unseal $(jq -r '.unseal_keys_b64[2]' bootstrap/init-keys.json)"
 
 # Create the unseal-keys Secret the watcher consumes (threshold = 3 keys).
 kubectl -n openbao create secret generic openbao-unseal-keys \
-  --from-literal=UNSEAL_KEY_1="$(jq -r '.unseal_keys_b64[0]' init-keys.json)" \
-  --from-literal=UNSEAL_KEY_2="$(jq -r '.unseal_keys_b64[1]' init-keys.json)" \
-  --from-literal=UNSEAL_KEY_3="$(jq -r '.unseal_keys_b64[2]' init-keys.json)"
+  --from-literal=UNSEAL_KEY_1="$(jq -r '.unseal_keys_b64[0]' bootstrap/init-keys.json)" \
+  --from-literal=UNSEAL_KEY_2="$(jq -r '.unseal_keys_b64[1]' bootstrap/init-keys.json)" \
+  --from-literal=UNSEAL_KEY_3="$(jq -r '.unseal_keys_b64[2]' bootstrap/init-keys.json)"
 ```
 
 From then on the `openbao-unseal` Deployment (GitOps-managed, in
-`apps/security/openbao/`) unseals the server automatically on every pod restart.
-A full **cluster/PVC recreate wipes OpenBao's storage** — re-run the two commands
-above (init produces new keys) when that happens.
+`apps/security/openbao/`) unseals the server automatically on every pod
+restart. If that pod was already up and stuck in `CreateContainerConfigError`
+(secret didn't exist yet when it was scheduled), restart it once so it
+picks up the Secret you just created — Deployments don't re-read `envFrom`
+into already-running pods:
+
+```sh
+kubectl -n openbao delete pod -l app.kubernetes.io/name=openbao-unseal
+```
+
+A full **cluster/PVC recreate wipes OpenBao's storage** — re-run all the
+commands above (init produces new keys) when that happens. Once you're done,
+move `bootstrap/init-keys.json` (root token + all 5 raw keys) out of the repo
+checkout and into a password manager or other secret store — it's git-ignored
+so it won't get committed, but it's still sitting there in plaintext on disk.
+
+**If storage is `Initialized: true` but `openbao-unseal-keys` is missing or
+wrong** (e.g. the Secret was deleted, or the keys were lost before being
+saved anywhere): those Shamir keys are gone for good — they only ever exist
+at the moment `bao operator init` runs. There is no recovery short of
+wiping storage and starting over:
+
+```sh
+kubectl -n openbao delete pod openbao-0
+kubectl -n openbao delete pvc data-openbao-0
+```
+
+Wait for the StatefulSet to recreate `openbao-0` with a fresh PVC (`bao
+status` should show `Initialized: false`), then redo the init + unseal +
+Secret steps above.
 
 ## Rollout order (health-gated)
 
