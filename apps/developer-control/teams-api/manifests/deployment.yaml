@@ -1,7 +1,9 @@
 # Teams API — FastAPI backend. The team store is persisted to a PersistentVolume
 # (see pvc.yaml) mounted at /data, so team data survives pod restarts.
-# Image is served from the kind local registry (localhost:5001 on the host,
-# resolved in-cluster via the containerd mirror -> http://kind-registry:5000).
+# Image is served from Harbor (in-cluster registry, GHCR-replicated — see
+# apps/integration-delivery/harbor-replication/). `platform` is a private
+# project, hence imagePullSecrets: harbor-pull (a Harbor robot account,
+# created out-of-band — see bootstrap/README.md).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,6 +28,8 @@ spec:
         component: backend
     spec:
       serviceAccountName: teams-api
+      imagePullSecrets:
+        - name: harbor-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001

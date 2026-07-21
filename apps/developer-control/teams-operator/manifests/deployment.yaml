@@ -1,5 +1,8 @@
 # Teams Operator — polls the Teams API and reconciles a namespace per team.
-# Image is served from the kind local registry (localhost:5001 -> kind-registry).
+# Image is served from Harbor (in-cluster registry, GHCR-replicated — see
+# apps/integration-delivery/harbor-replication/). `platform` is a private
+# project, hence imagePullSecrets: harbor-pull (a Harbor robot account,
+# created out-of-band — see bootstrap/README.md).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,6 +21,8 @@ spec:
         app: teams-operator
     spec:
       serviceAccountName: teams-operator
+      imagePullSecrets:
+        - name: harbor-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001

@@ -3,8 +3,11 @@
 #   API_URL      = /api  -> nginx reverse-proxies to teams-api-service:8000
 #                          (same namespace), so API traffic stays in-cluster.
 #   KEYCLOAK_URL = http://platform-auth.127.0.0.1.sslip.io:8080/auth (browser).
-# Rebuild + bump the tag to change them. Image is served from the kind local
-# registry (localhost:5001 -> kind-registry).
+# Rebuild + bump the tag to change them. Image is served from Harbor
+# (in-cluster registry, GHCR-replicated — see
+# apps/integration-delivery/harbor-replication/). `platform` is a private
+# project, hence imagePullSecrets: harbor-pull (a Harbor robot account,
+# created out-of-band — see bootstrap/README.md).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,6 +27,8 @@ spec:
         app: teams-app
         component: frontend
     spec:
+      imagePullSecrets:
+        - name: harbor-pull
       containers:
       - name: teams-app
         # 0.4.5: component cards show Version + Registry + Image (name).
