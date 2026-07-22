@@ -52,10 +52,13 @@ spec:
           value: "/data"
         # Browser-facing ingress scheme/port, used to turn an app's Ingress host
         # into a clickable URL on its card (web -> page, api -> Swagger docs).
+        # Tenant Ingresses now terminate TLS (see demo-*/deploy's tls: blocks),
+        # and the kind node maps the ingress controller's 443 -> host 8443
+        # (`docker port platform-base-control-plane`: 443/tcp -> 0.0.0.0:8443).
         - name: PUBLIC_INGRESS_SCHEME
-          value: "http"
+          value: "https"
         - name: PUBLIC_INGRESS_PORT
-          value: "8080"
+          value: "8443"
         # --- JWT auth (Keycloak) -------------------------------------------
         # Reject unauthenticated calls; validate Keycloak-issued access tokens
         # (RS256) against the realm JWKS. The UI (client teams-ui) and CLI
