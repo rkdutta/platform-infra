@@ -2,14 +2,14 @@
 # VulnerabilityReport (synced via config-sync.yaml) for each pod's workload and
 # flags it when the image has too many Critical CVEs.
 #
-# enforcementAction: dryrun -> Gatekeeper AUDIT records violations (surfacing in
-# the portal compliance badges) without blocking admission. This fits Trivy
-# Operator's continuous-scanning model: reports are produced AFTER a workload
-# runs, so blocking at admission would reject first-time deploys.
+# Sync-wave 0: must land (and be reconciled by Gatekeeper into a CRD) before
+# the Constraint that references it — see vulnerabilities-constraint.yaml.
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8strivyvulnerabilities
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   crd:
     spec:
@@ -38,18 +38,3 @@ spec:
           crit > max
           msg := sprintf("image %v has %v critical CVEs (max allowed %v) [VulnerabilityReport %v]", [report.report.artifact.repository, crit, max, report.metadata.name])
         }
----
-apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sTrivyVulnerabilities
-metadata:
-  name: no-critical-cves
-spec:
-  enforcementAction: dryrun
-  match:
-    kinds:
-      - apiGroups: [""]
-        kinds: ["Pod"]
-    namespaces:
-      - trivy-demo
-  parameters:
-    maxCritical: 0

@@ -1,0 +1,24 @@
+# enforcementAction: dryrun -> Gatekeeper AUDIT records violations (surfacing in
+# the portal compliance badges) without blocking admission. This fits Trivy
+# Operator's continuous-scanning model: reports are produced AFTER a workload
+# runs, so blocking at admission would reject first-time deploys.
+#
+# Sync-wave 1: the K8sTrivyVulnerabilities CRD this depends on only exists
+# once Gatekeeper reconciles vulnerabilities-template.yaml's ConstraintTemplate
+# (sync-wave 0) — applying both in the same wave races the CRD's creation.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sTrivyVulnerabilities
+metadata:
+  name: no-critical-cves
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - trivy-demo
+  parameters:
+    maxCritical: 0
