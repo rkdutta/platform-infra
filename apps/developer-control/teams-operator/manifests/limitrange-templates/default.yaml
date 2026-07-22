@@ -1,0 +1,31 @@
+# Rendered by teams-operator's ensure_limit_ranges: {{ NAMESPACE }} is
+# replaced with the target tenant namespace, then the result is parsed as
+# YAML and passed straight to the Kubernetes API — same pattern as
+# ../quota-templates/*.yaml.
+#
+# Backstop for any container that doesn't declare its own requests/limits
+# (default/defaultRequest), plus sane min/max bounds so nothing in a tenant
+# namespace can be scheduled with zero resources or run away unbounded.
+# Values are sized around what the current demo workloads already request
+# themselves (25-50m cpu / 32-96Mi memory) — a container that sets nothing
+# lands close to real usage, not an arbitrary guess.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-default-limits
+  namespace: "{{ NAMESPACE }}"
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: "50m"
+        memory: "64Mi"
+      default:
+        cpu: "200m"
+        memory: "256Mi"
+      min:
+        cpu: "10m"
+        memory: "16Mi"
+      max:
+        cpu: "1"
+        memory: "1Gi"

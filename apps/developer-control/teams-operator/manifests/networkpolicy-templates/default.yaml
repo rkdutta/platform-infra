@@ -1,0 +1,37 @@
+# Rendered by teams-operator's ensure_network_policies: {{ NAMESPACE }} is
+# replaced with the target tenant namespace, then the result is parsed as
+# YAML and passed straight to the Kubernetes API — same pattern as
+# ../quota-templates/*.yaml and ../limitrange-templates/default.yaml.
+#
+# podSelector: {} selects every pod in the namespace. Ingress is in
+# policyTypes with no ingress rules -> deny all. Egress is in policyTypes
+# with an explicit "match everything" rule (egress: [{}]) -> allow all,
+# deliberately (not just "unset" - see the comment on egress below for why
+# that distinction matters).
+#
+# Caveat: this cluster's CNI (kindnet) does not enforce NetworkPolicy at
+# all, so today this is audit/intent only - it satisfies
+# tenant-require-network-policy (apps/security/tenant-guardrails) and
+# documents the intended isolation shape, but doesn't actually block
+# anything yet. On a policy-enforcing CNI (Calico, Cilium, ...), "block all
+# ingress" would also block the shared ingress-nginx controller's traffic
+# into these pods - an allow rule scoped to the ingress-nginx namespace
+# would need to be added before this could go from symbolic to real.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-default-network-policy
+  namespace: "{{ NAMESPACE }}"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    # An empty rule ({}) matches all destinations/ports - explicit "allow
+    # everything," not the same as omitting egress rules (which would deny
+    # all egress once Egress is in policyTypes) and not the same as leaving
+    # Egress out of policyTypes entirely (which would leave egress
+    # ungoverned by this policy, relying on there never being another
+    # policy in the namespace that also touches Egress).
+    - {}

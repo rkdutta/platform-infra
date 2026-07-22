@@ -86,7 +86,26 @@ spec:
         - name: quota-templates
           mountPath: /app/quota-templates
           readOnly: true
+        # LimitRange manifest template (see manifests/limitrange-templates/).
+        # ensure_limit_ranges in teams_operator.py renders this per tenant
+        # namespace at apply time - same reasoning as quota-templates above.
+        - name: limitrange-templates
+          mountPath: /app/limitrange-templates
+          readOnly: true
+        # NetworkPolicy manifest template (see
+        # manifests/networkpolicy-templates/). ensure_network_policies in
+        # teams_operator.py renders this per tenant namespace at apply time -
+        # same reasoning as quota-templates above.
+        - name: networkpolicy-templates
+          mountPath: /app/networkpolicy-templates
+          readOnly: true
       volumes:
       - name: quota-templates
         configMap:
           name: teams-operator-quota-templates
+      - name: limitrange-templates
+        configMap:
+          name: teams-operator-limitrange-templates
+      - name: networkpolicy-templates
+        configMap:
+          name: teams-operator-networkpolicy-templates

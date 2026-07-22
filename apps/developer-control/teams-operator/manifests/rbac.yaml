@@ -63,6 +63,16 @@ rules:
 - apiGroups: [""]
   resources: ["resourcequotas"]
   verbs: ["create"]
+# Default LimitRange per tenant namespace (see ensure_limit_ranges) — same
+# create-if-missing reasoning as resourcequotas above.
+- apiGroups: [""]
+  resources: ["limitranges"]
+  verbs: ["create"]
+# Default NetworkPolicy per tenant namespace (see ensure_network_policies) —
+# same create-if-missing reasoning as resourcequotas above.
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
