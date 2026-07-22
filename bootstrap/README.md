@@ -243,7 +243,8 @@ docker exec platform-base-control-plane sh -c '
     - --oidc-client-id=teams-cli\\
     - --oidc-username-claim=preferred_username\\
     - --oidc-username-prefix=-\\
-    - --oidc-ca-file=/etc/kubernetes/pki/oidc-ca.crt" \
+    - --oidc-ca-file=/etc/kubernetes/pki/oidc-ca.crt\\
+    - --oidc-groups-claim=groups" \
     /etc/kubernetes/manifests/kube-apiserver.yaml > /tmp/kube-apiserver.yaml.new
   mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.old
   mv /tmp/kube-apiserver.yaml.new /etc/kubernetes/manifests/kube-apiserver.yaml
@@ -258,22 +259,42 @@ have a different `aud` and are correctly rejected here — that's expected,
 not a bug, `teams-cli login` is what feeds `kubectl`).
 
 Why `--oidc-username-prefix=-`: without it, k8s prefixes every OIDC username
-with `<issuer>#`, which wouldn't match the plain usernames teams-operator
-uses as RoleBinding subjects. Why the issuer must be the exact
+with `<issuer>#`, which wouldn't match the plain usernames RBAC checks
+expect. Why the issuer must be the exact
 `https://platform-auth.127.0.0.1.sslip.io:8443/...` browser-facing URL and
 can't be swapped for something more reachable: it has to match the `iss`
 claim already baked into Keycloak's tokens byte-for-byte — there's no
 aliasing mechanism in kube-apiserver's OIDC authenticator.
 
-A full cluster recreate wipes all of this (new API server port, fresh static
-pod manifest, `teams-api-k8s-access` Secret gone) — redo both steps.
+`--oidc-groups-claim=groups`: empirically verified there's **no** default
+prefix for groups the way usernames get one — a token's raw `groups: [X]`
+resolves to exactly `X` in a `SelfSubjectReview`, no `--oidc-groups-prefix`
+needed. This is what lets teams-operator's static, Group-subject
+RoleBindings (`{namespace}-viewer` / `{namespace}-maintainer` — see
+teams-api's `_k8s_group_name`) match on the plain namespace-derived name.
 
-**Developer setup, once the above is in place:** `teams-cli login` then
-`teams-cli kubeconfig` (or use the "Download kubeconfig" button on the Teams
-page, which needs `teams-cli login` done locally too — the downloaded file's
-`exec:` stanza calls back into it for the actual token). Namespace access
-follows whatever teams-api's Users page says, synced by teams-operator within
-one poll cycle (~30s) of a grant/revoke.
+A full cluster recreate wipes all of this (new API server port, fresh static
+pod manifest, `teams-api-k8s-access` ConfigMap gone) — redo both steps.
+
+**Developer setup, once the above is in place:** install the
+[kubelogin](https://github.com/int128/kubelogin) plugin
+(`brew install int128/kubelogin/kubelogin`), then download a kubeconfig from
+the Teams page ("Download kubeconfig") or `GET /kubeconfig` directly — its
+`exec:` stanza runs `kubectl oidc-login get-token` itself, doing its own PKCE
+login against Keycloak's `teams-cli` client at `kubectl` invocation time; no
+separate CLI login step needed first.
+
+**How access actually propagates now**: teams-api mirrors grants/revokes/
+ownership changes directly into Keycloak group membership at the moment
+they happen (see `main.py`'s `_sync_group_membership` and its call sites),
+with a periodic in-process reconciliation pass (`GROUP_RECONCILE_INTERVAL`,
+default 60s) as a self-healing backstop against a missed sync. The
+RoleBindings themselves (teams-operator's job) are static — created once per
+namespace and never touched again. So a grant/revoke takes effect on the
+affected user's *next token refresh* (Keycloak's normal token lifetime —
+minutes), not their very next `kubectl` command — a deliberate tradeoff for
+not having to patch a Kubernetes object on every access change (see
+`platform-idp`'s teams-api commit history for the full "why").
 
 ## Rollout order (health-gated)
 
