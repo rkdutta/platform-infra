@@ -113,6 +113,17 @@ spec:
               name: teams-api-k8s-access
               key: ca.crt
               optional: true
+        # What validates Keycloak's TLS cert for the `kubectl oidc-login` exec
+        # plugin the kubeconfig embeds. Same platform-tls wildcard cert every
+        # ingress in this namespace already uses — no new out-of-band step,
+        # this Secret already exists (see bootstrap/README.md's platform-tls
+        # section).
+        - name: KEYCLOAK_CA_CERT
+          valueFrom:
+            secretKeyRef:
+              name: platform-tls
+              key: tls.crt
+              optional: true
         volumeMounts:
         - name: data
           mountPath: /data
