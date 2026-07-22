@@ -47,6 +47,16 @@ spec:
       destination:
         server: https://kubernetes.default.svc
         namespace: team-jack-default
+      # Gatekeeper's default-priority-class mutation (see
+      # apps/security/tenant-guardrails) injects priorityClassName into the
+      # live Rollout at admission time when this manifest doesn't set one -
+      # without this, Argo would see permanent drift on that one field and
+      # selfHeal would fight the mutation every cycle.
+      ignoreDifferences:
+        - group: argoproj.io
+          kind: Rollout
+          jsonPointers:
+            - /spec/template/spec/priorityClassName
       syncPolicy:
         automated:
           prune: true

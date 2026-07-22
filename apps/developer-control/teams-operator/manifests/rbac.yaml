@@ -57,6 +57,12 @@ rules:
   resources: ["serviceaccounts"]
   verbs: ["get", "patch"]
   resourceNames: ["default"]
+# Priority-scoped quota buckets per tenant namespace (see
+# ensure_priority_quotas). create-if-missing only, like the RoleBindings —
+# no `get`/`list` needed since the code never reads one back.
+- apiGroups: [""]
+  resources: ["resourcequotas"]
+  verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

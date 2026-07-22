@@ -1,0 +1,28 @@
+# Same as default-priority-class-deployment.yaml, for Argo Rollouts - the
+# kind every current tenant workload (demo-api-go, demo-web-go, demo-api-py,
+# demo-web-py) actually uses.
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: default-priority-class-rollout
+spec:
+  applyTo:
+    - groups: ["argoproj.io"]
+      kinds: ["Rollout"]
+      versions: ["v1alpha1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.priorityClassName"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.priorityClassName"
+        condition: MustNotExist
+    assign:
+      value: "tenant-standard"

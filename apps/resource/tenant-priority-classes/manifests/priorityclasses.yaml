@@ -1,0 +1,36 @@
+# Three scheduling tiers for tenant workloads. globalDefault is deliberately
+# false on all three: a cluster-wide default would silently reclassify every
+# non-tenant pod (Harbor, Keycloak, the monitoring stack, cert-manager, ...)
+# that doesn't set its own priorityClassName, none of which are tenants.
+# Instead, tenant workloads that don't set one explicitly get defaulted to
+# tenant-standard by a Gatekeeper mutation scoped to tenant namespaces only
+# (see apps/security/tenant-guardrails's default-priority-class Assign
+# objects) - so the "default" is tenant-scoped, not cluster-scoped.
+#
+# Each tier has its own ResourceQuota per tenant namespace (scopeSelector:
+# PriorityClass In [tier] - see teams-operator's ensure_priority_quotas), so
+# a team's best-effort/batch work can never eat into the capacity reserved
+# for its must-run workloads.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: tenant-critical
+value: 1000
+globalDefault: false
+description: "Reserved for must-run tenant workloads"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: tenant-standard
+value: 500
+globalDefault: false
+description: "Default tier for normal tenant workloads"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: tenant-besteffort
+value: 100
+globalDefault: false
+description: "Preemptible/batch tenant workloads"

@@ -1,0 +1,34 @@
+# Three PriorityClasses tenants schedule against (see manifests/). Cluster-
+# scoped and static - unlike the per-namespace ResourceQuotas that reference
+# them (created dynamically by teams-operator, one set per tenant namespace),
+# these only ever need to exist once.
+#
+# Sync-wave 0: must exist before anything can reference them. A Pod naming a
+# priorityClassName that doesn't exist yet fails admission outright - this
+# includes both explicit tenant workloads and the tenant-standard default the
+# Gatekeeper mutation injects (apps/security/tenant-guardrails), and the
+# priority-scoped ResourceQuotas teams-operator creates per namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tenant-priority-classes
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: resource
+spec:
+  project: resource
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/resource/tenant-priority-classes/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

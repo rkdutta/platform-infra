@@ -1,0 +1,36 @@
+# Defaults spec.template.spec.priorityClassName to tenant-standard on any
+# tenant Deployment that doesn't set one explicitly - a workload that wants
+# tenant-critical or tenant-besteffort still gets exactly that (pathTests
+# below only fires when the field is genuinely absent, never overwrites an
+# explicit value). Depends on apps/resource/tenant-priority-classes existing
+# first - a Pod naming a priorityClassName that doesn't exist fails
+# admission outright.
+#
+# This mutates the live object without touching the app's own git manifest,
+# so Argo would otherwise see permanent drift on this one field - see the
+# ignoreDifferences added to apps/workloads/demo-*/applicationset.yaml.
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: default-priority-class-deployment
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.priorityClassName"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.priorityClassName"
+        condition: MustNotExist
+    assign:
+      value: "tenant-standard"
