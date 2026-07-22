@@ -1,0 +1,19 @@
+# Rendered by teams-operator's ensure_priority_quotas: {{ NAMESPACE }} is
+# replaced with the target tenant namespace, then the result is parsed as
+# YAML and passed straight to the Kubernetes API — this file IS the desired
+# object, not a description of one.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quota-critical
+  namespace: "{{ NAMESPACE }}"
+spec:
+  scopeSelector:
+    matchExpressions:
+      - operator: In
+        scopeName: PriorityClass
+        values: ["tenant-critical"]
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    pods: "20"

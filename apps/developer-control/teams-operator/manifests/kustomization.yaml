@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Turns this directory from a plain-manifest source into a Kustomize one so
+# the quota-templates/*.yaml files can be packaged into a ConfigMap without
+# copy/pasting their content into a manifest by hand (same pattern already
+# used by apps/security/falco/rules and
+# apps/integration-delivery/harbor-replication/manifests).
+namespace: engineering-platform
+
+resources:
+  - deployment.yaml
+  - rbac.yaml
+
+# Each file becomes a key: data["critical.yaml"], data["standard.yaml"],
+# data["besteffort.yaml"]. teams-operator mounts this and renders each one
+# per tenant namespace at apply time — see ensure_priority_quotas in
+# teams_operator.py.
+configMapGenerator:
+  - name: teams-operator-quota-templates
+    files:
+      - quota-templates/critical.yaml
+      - quota-templates/standard.yaml
+      - quota-templates/besteffort.yaml
+
+generatorOptions:
+  # Keep a stable name so deployment.yaml's volume can reference it directly.
+  # A live ConfigMap volume mount updates its files in place on kubelet's own
+  # sync period even without a name change or pod restart, and
+  # ensure_priority_quotas re-reads the files from disk on every
+  # reconciliation cycle anyway - a hash suffix (which would force a rename +
+  # a matching volume-reference update on every edit) buys nothing here,
+  # unlike harbor-replication's PostSync Job, which needs one to force a
+  # fresh run.
+  disableNameSuffixHash: true

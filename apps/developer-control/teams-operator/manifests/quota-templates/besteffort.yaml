@@ -1,0 +1,16 @@
+# See critical.yaml for how this gets rendered and applied.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quota-besteffort
+  namespace: "{{ NAMESPACE }}"
+spec:
+  scopeSelector:
+    matchExpressions:
+      - operator: In
+        scopeName: PriorityClass
+        values: ["tenant-besteffort"]
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    pods: "30"

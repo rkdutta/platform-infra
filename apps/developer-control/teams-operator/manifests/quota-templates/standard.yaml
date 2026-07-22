@@ -1,0 +1,16 @@
+# See critical.yaml for how this gets rendered and applied.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quota-standard
+  namespace: "{{ NAMESPACE }}"
+spec:
+  scopeSelector:
+    matchExpressions:
+      - operator: In
+        scopeName: PriorityClass
+        values: ["tenant-standard"]
+  hard:
+    requests.cpu: "16"
+    requests.memory: 32Gi
+    pods: "50"

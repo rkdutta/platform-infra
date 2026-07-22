@@ -76,3 +76,17 @@ spec:
             command: ["python", "-c", "import sys; sys.exit(0)"]
           initialDelaySeconds: 5
           periodSeconds: 10
+        volumeMounts:
+        # ResourceQuota manifest templates (see manifests/quota-templates/ and
+        # the configMapGenerator in this directory's kustomization.yaml).
+        # ensure_priority_quotas in teams_operator.py renders these per
+        # tenant namespace at apply time - a ConfigMap volume's files update
+        # in place on kubelet's own sync period, so editing a template's
+        # limits here takes effect without an operator image rebuild.
+        - name: quota-templates
+          mountPath: /app/quota-templates
+          readOnly: true
+      volumes:
+      - name: quota-templates
+        configMap:
+          name: teams-operator-quota-templates
