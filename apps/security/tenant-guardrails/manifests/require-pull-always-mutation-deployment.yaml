@@ -1,0 +1,47 @@
+# Forces every container's imagePullPolicy to Always on tenant Deployments —
+# unconditionally (no pathTests guard, unlike default-priority-class-*.yaml):
+# this always overwrites whatever the manifest says, rather than only
+# filling in a gap, since the point is that a mutable-tag image is never
+# safe to cache locally regardless of what an app repo's own manifest
+# claims. Depends on apps/resource/tenant-priority-classes existing first is
+# NOT a concern here (unlike the priority-class mutations) - imagePullPolicy
+# needs no supporting cluster object to be valid.
+#
+# [name: *] mutates every element of the containers list, not just the
+# first — see Gatekeeper's mutation docs for this syntax. initContainers
+# aren't covered (no tenant workload uses them today); add a second Assign
+# with location "spec.template.spec.initContainers[name: *].imagePullPolicy"
+# if that ever changes.
+#
+# This makes the tenant-require-pull-always Gatekeeper *constraint*
+# (apps/security/tenant-guardrails's require-pull-always-constraint.yaml)
+# permanently non-violating for anything admitted after this mutation
+# exists — the mutation and the audit constraint check the same fact from
+# two different angles (prevent vs. detect drift).
+#
+# Live object won't match the app repo's own manifest value if that repo
+# ever sets anything other than Always, so Argo would otherwise see
+# permanent drift - see the ignoreDifferences added to
+# apps/workloads/demo-*/applicationset.yaml.
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: require-pull-always-deployment
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.containers[name: *].imagePullPolicy"
+  parameters:
+    assign:
+      value: "Always"

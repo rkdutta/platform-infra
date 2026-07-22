@@ -4,19 +4,24 @@
 # ../quota-templates/*.yaml and ../limitrange-templates/default.yaml.
 #
 # podSelector: {} selects every pod in the namespace. Ingress is in
-# policyTypes with no ingress rules -> deny all. Egress is in policyTypes
-# with an explicit "match everything" rule (egress: [{}]) -> allow all,
-# deliberately (not just "unset" - see the comment on egress below for why
-# that distinction matters).
+# policyTypes with one allow rule scoped to the shared ingress-nginx
+# controller (everything else is denied - this IS "block all ingress" in
+# effect, minus the one path the tenant's own public Ingress depends on to
+# work at all). Egress is in policyTypes with an explicit "match
+# everything" rule (egress: [{}]) -> allow all, deliberately (not just
+# "unset" - see the comment on egress below for why that distinction
+# matters).
 #
-# Caveat: this cluster's CNI (kindnet) does not enforce NetworkPolicy at
-# all, so today this is audit/intent only - it satisfies
-# tenant-require-network-policy (apps/security/tenant-guardrails) and
-# documents the intended isolation shape, but doesn't actually block
-# anything yet. On a policy-enforcing CNI (Calico, Cilium, ...), "block all
-# ingress" would also block the shared ingress-nginx controller's traffic
-# into these pods - an allow rule scoped to the ingress-nginx namespace
-# would need to be added before this could go from symbolic to real.
+# This cluster's CNI (kindnet) DOES enforce NetworkPolicy - confirmed
+# empirically (not assumed): a literal zero-exceptions "deny all ingress"
+# here 504'd the tenant's own Ingress-routed traffic, because that traffic
+# arrives at the pod from the ingress-nginx controller's pod, in a
+# different namespace, which a bare deny-all also blocks. Every tenant
+# workload today is reached exclusively through that shared ingress
+# controller (see apps/security/tenant-guardrails's
+# tenant-deny-lb-nodeport/tenant-require-ingress-class - no other ingress
+# path is allowed to exist), so this one exception doesn't reopen anything
+# the rest of this policy set doesn't already assume.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -27,6 +32,14 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
   egress:
     # An empty rule ({}) matches all destinations/ports - explicit "allow
     # everything," not the same as omitting egress rules (which would deny
