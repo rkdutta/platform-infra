@@ -1,6 +1,12 @@
 # Identity + cluster permissions for the operator. It watches teams from the
 # Teams API and creates/deletes a namespace per team, so it needs cluster-wide
-# namespace management (plus event emission).
+# namespace management (plus event emission). It also syncs teams-api's
+# permission model onto real RBAC (RoleBindings per namespace + one
+# cluster-admin ClusterRoleBinding) — see teams_operator.py's
+# sync_namespace_rbac/sync_admin_binding. That's a real privilege increase for
+# this ServiceAccount: it goes from "manages namespace lifecycle" to "decides
+# who gets view/edit/cluster-admin anywhere in the cluster" — the enforcement
+# arm for what teams-api's DB already decides at the app layer.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -18,6 +24,20 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["create"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["rolebindings"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterrolebindings"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+# RBAC's escalation-prevention check: creating a RoleBinding/ClusterRoleBinding
+# that references a Role/ClusterRole you don't yourself hold requires the
+# `bind` verb on that specific one. Scoped by resourceNames to exactly the
+# three built-in ClusterRoles the operator ever references — not "bind: *".
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles"]
+  verbs: ["bind"]
+  resourceNames: ["view", "edit", "cluster-admin"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

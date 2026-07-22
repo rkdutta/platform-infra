@@ -92,6 +92,27 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        # --- Cluster connection info (GET /kubeconfig) ------------------------
+        # What a developer's own machine needs to reach the API server directly
+        # (not the in-cluster Service used everywhere else above). Created
+        # out-of-band — see bootstrap/README.md — because the API server's host
+        # port is assigned dynamically by Docker and isn't knowable at manifest-
+        # authoring time; not sensitive (a CA cert, not a credential), hence a
+        # ConfigMap rather than a Secret. If absent, /kubeconfig degrades to a
+        # clear 503 rather than serving an unusable file (the env refs are
+        # optional, same pattern as KC_ADMIN_CLIENT_SECRET above).
+        - name: K8S_API_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: teams-api-k8s-access
+              key: server
+              optional: true
+        - name: K8S_API_CA_CERT
+          valueFrom:
+            configMapKeyRef:
+              name: teams-api-k8s-access
+              key: ca.crt
+              optional: true
         volumeMounts:
         - name: data
           mountPath: /data

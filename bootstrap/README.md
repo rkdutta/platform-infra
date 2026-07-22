@@ -189,6 +189,92 @@ mounts + `nsenter`, which is a meaningfully bigger, standing security
 tradeoff (this cluster runs Gatekeeper + Falco) than a one-time manual step
 re-run after a rebuild.
 
+## kubectl access via Keycloak (OIDC) + teams-api-synced RBAC
+
+Team permissions (ownership, per-namespace viewer/maintainer grants) now have
+real effect in the cluster: `teams-operator` mirrors them onto RoleBindings
+per namespace (`view`/`edit` built-in ClusterRoles) plus one ClusterRoleBinding
+(`teams-admins` → `cluster-admin`, one entry per Keycloak `admin`-role user).
+None of that means anything, though, until the API server can authenticate a
+human via their Keycloak token — by default it can't; only ServiceAccounts
+exist as cluster identities. Two one-time, node-level steps make this real:
+
+**1. Cluster connection info for `GET /kubeconfig`** — `teams-api` serves a
+ready-to-use kubeconfig (downloadable from the Teams page, or via
+`teams-cli kubeconfig`) built from a ConfigMap, not committed to git (the
+API server's host port is assigned dynamically by Docker and can change
+across a cluster recreate):
+
+```sh
+kubectl -n engineering-platform create configmap teams-api-k8s-access \
+  --from-literal=server="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')" \
+  --from-file=ca.crt=<(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)
+```
+
+**2. OIDC on the API server** — `kube-apiserver` runs as a static pod on the
+control-plane node, so this is a `docker exec` edit, not a cluster recreate:
+
+```sh
+# a) Trust the platform-tls CA for the OIDC issuer's TLS (reuses the cert
+#    from the platform-tls section above).
+docker cp /tmp/platform-tls.crt platform-base-control-plane:/etc/kubernetes/pki/oidc-ca.crt
+
+# b) The issuer URL includes port 8443, which — unlike Harbor's 443 — only
+#    exists as a *host*-level Docker port mapping, not reachable via the
+#    ClusterIP trick. Docker Desktop's host.docker.internal reaches it anyway:
+IP=$(docker exec platform-base-control-plane getent hosts host.docker.internal | awk '{print $1}')
+docker exec platform-base-control-plane sh -c \
+  "grep -q platform-auth.127.0.0.1.sslip.io /etc/hosts || echo '$IP platform-auth.127.0.0.1.sslip.io' >> /etc/hosts"
+
+# c) Add the OIDC flags to the static pod manifest. IMPORTANT: don't leave a
+#    backup copy (even named .yaml.bak) inside /etc/kubernetes/manifests/ —
+#    kubelet's static-pod file source doesn't filter by extension, so a second
+#    file defining a pod named "kube-apiserver" causes it to inconsistently
+#    recreate from whichever one it picks (this bit us once already: a
+#    stray backup sat in the directory during the edit, and kubelet kept
+#    recreating the apiserver from the *stale* pre-edit copy for several
+#    minutes with no error, no crash — just silently the wrong config, until
+#    the extra file was moved out and the pod recreated cleanly). Edit the
+#    manifest via a temp path elsewhere, or edit in place with a tool that
+#    doesn't leave a same-directory backup:
+docker exec platform-base-control-plane sh -c '
+  sed "/--client-ca-file=/a\\
+    - --oidc-issuer-url=https://platform-auth.127.0.0.1.sslip.io:8443/auth/realms/teams\\
+    - --oidc-client-id=teams-cli\\
+    - --oidc-username-claim=preferred_username\\
+    - --oidc-username-prefix=-\\
+    - --oidc-ca-file=/etc/kubernetes/pki/oidc-ca.crt" \
+    /etc/kubernetes/manifests/kube-apiserver.yaml > /tmp/kube-apiserver.yaml.new
+  mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.old
+  mv /tmp/kube-apiserver.yaml.new /etc/kubernetes/manifests/kube-apiserver.yaml
+'
+```
+
+Wait ~20s for kubelet to recreate the pod, then verify: `kubectl get nodes`
+should still work (unrelated to OIDC — proves the API server came back at
+all), and `--oidc-client-id=teams-cli` means only tokens issued *to* the
+`teams-cli` client authenticate this way (`teams-ui` browser-login tokens
+have a different `aud` and are correctly rejected here — that's expected,
+not a bug, `teams-cli login` is what feeds `kubectl`).
+
+Why `--oidc-username-prefix=-`: without it, k8s prefixes every OIDC username
+with `<issuer>#`, which wouldn't match the plain usernames teams-operator
+uses as RoleBinding subjects. Why the issuer must be the exact
+`https://platform-auth.127.0.0.1.sslip.io:8443/...` browser-facing URL and
+can't be swapped for something more reachable: it has to match the `iss`
+claim already baked into Keycloak's tokens byte-for-byte — there's no
+aliasing mechanism in kube-apiserver's OIDC authenticator.
+
+A full cluster recreate wipes all of this (new API server port, fresh static
+pod manifest, `teams-api-k8s-access` Secret gone) — redo both steps.
+
+**Developer setup, once the above is in place:** `teams-cli login` then
+`teams-cli kubeconfig` (or use the "Download kubeconfig" button on the Teams
+page, which needs `teams-cli login` done locally too — the downloaded file's
+`exec:` stanza calls back into it for the actual token). Namespace access
+follows whatever teams-api's Users page says, synced by teams-operator within
+one poll cycle (~30s) of a grant/revoke.
+
 ## Rollout order (health-gated)
 
 Each wave must be **Synced and Healthy** before the next begins:
