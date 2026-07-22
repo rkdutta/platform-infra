@@ -38,6 +38,25 @@ rules:
   resources: ["clusterroles"]
   verbs: ["bind"]
   resourceNames: ["view", "edit", "cluster-admin"]
+# Lets every team namespace pull from Harbor's private `platform` project
+# (see ensure_harbor_pull_secret / ensure_default_sa_pull_secret). `get` is
+# pinned to the one Secret name the operator ever touches via resourceNames
+# — but Kubernetes RBAC can't scope `create` by resourceNames (a create
+# request has no object identity to check against yet), so create is
+# necessarily "any Secret, any namespace." The operator's own code is what
+# keeps that to just harbor-pull; this is not a read grant (no `get`/`list`
+# beyond the one pinned name above), so it can create but never exfiltrate.
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  resourceNames: ["harbor-pull"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  verbs: ["get", "patch"]
+  resourceNames: ["default"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

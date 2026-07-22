@@ -40,6 +40,19 @@ spec:
           value: "http://teams-api-service.engineering-platform.svc.cluster.local:8000"
         - name: POLL_INTERVAL
           value: "30"
+        # Reuses this same Deployment's own harbor-pull Secret so every team
+        # namespace the operator provisions can also pull from Harbor's
+        # private `platform` project — see ensure_harbor_pull_secret in
+        # teams_operator.py. Optional: if harbor-pull isn't there yet (fresh
+        # bootstrap, before the runbook step in bootstrap/README.md), the
+        # operator just skips imagePullSecret provisioning rather than
+        # crash-looping.
+        - name: HARBOR_DOCKERCONFIGJSON
+          valueFrom:
+            secretKeyRef:
+              name: harbor-pull
+              key: .dockerconfigjson
+              optional: true
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
