@@ -4,18 +4,14 @@
 # external-data provider ("ratify-gatekeeper-provider") for every container
 # image and fails admission if verification did not succeed.
 #
-# The Constraint scopes enforcement to the `ratify-demo` namespace only — so it
-# gates our test workloads without breaking system pods (whose images aren't
-# cosign-signed with our key).
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ratify-demo
----
+# Sync-wave 0: must land (and be reconciled by Gatekeeper into a CRD) before
+# the Constraint that references it — see verification-constraint.yaml.
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: ratifyverification
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   crd:
     spec:
@@ -60,16 +56,3 @@ spec:
           subject_validation[1].isSuccess == false
           result := sprintf("Time=%s, failed to verify the artifact: %s, trace-id: %s", [subject_validation[1].timestamp, subject_validation[0], subject_validation[1].traceID])
         }
----
-apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: RatifyVerification
-metadata:
-  name: ratify-verify-signatures
-spec:
-  enforcementAction: deny
-  match:
-    kinds:
-      - apiGroups: [""]
-        kinds: ["Pod"]
-    namespaces:
-      - ratify-demo

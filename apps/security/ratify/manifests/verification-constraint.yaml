@@ -1,0 +1,21 @@
+# The Constraint scopes enforcement to the `ratify-demo` namespace only — so it
+# gates our test workloads without breaking system pods (whose images aren't
+# cosign-signed with our key).
+#
+# Sync-wave 1: the RatifyVerification CRD this depends on only exists once
+# Gatekeeper reconciles verification-template.yaml's ConstraintTemplate
+# (sync-wave 0) — applying both in the same wave races the CRD's creation.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RatifyVerification
+metadata:
+  name: ratify-verify-signatures
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - ratify-demo

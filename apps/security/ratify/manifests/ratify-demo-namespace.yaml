@@ -1,0 +1,7 @@
+# Namespace the RatifyVerification constraint (verification-constraint.yaml)
+# scopes enforcement to — kept separate from the ConstraintTemplate/Constraint
+# split so it can sync at the default wave with no dependency either way.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ratify-demo
