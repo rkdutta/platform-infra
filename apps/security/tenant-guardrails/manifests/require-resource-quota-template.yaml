@@ -1,0 +1,46 @@
+# Tenant isolation, part 1: every tenant namespace should have a
+# ResourceQuota so one team can't consume unbounded cluster capacity.
+# Referential (reads Gatekeeper's synced inventory - see
+# trivy-gatekeeper/manifests/config-sync.yaml's Config, which this
+# constraint also depends on), triggered on Pod creation so it's re-checked
+# whenever a namespace actually starts being used.
+#
+# dryrun: no tenant namespace has a ResourceQuota today - flipping this to
+# deny would block every future pod in team-jack-dev/team-jack-default until
+# quotas are backfilled. Audit first.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireresourcequota
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireResourceQuota
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireresourcequota
+
+        # "not has_resourcequota(ns)" rather than counting: a namespace with
+        # zero synced ResourceQuota objects has no key for it anywhere in
+        # data.inventory, and object.get() against a base path that's itself
+        # undefined stays undefined (verified empirically) rather than
+        # falling through to the default - which would make a count()-based
+        # rule silently never fire. Existence-checking via iteration and
+        # negating with `not` handles a missing path the same way it
+        # already correctly handles a missing field elsewhere in these
+        # templates (e.g. block-privileged-template.yaml's
+        # allowPrivilegeEscalation check): `not X` succeeds whenever X is
+        # false OR undefined.
+        violation[{"msg": msg}] {
+          ns := input.review.object.metadata.namespace
+          not has_resourcequota(ns)
+          msg := sprintf("namespace %v must have a ResourceQuota", [ns])
+        }
+
+        has_resourcequota(ns) {
+          data.inventory.namespace[ns]["v1"]["ResourceQuota"][_]
+        }

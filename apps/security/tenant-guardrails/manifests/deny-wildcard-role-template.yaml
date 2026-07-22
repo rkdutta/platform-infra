@@ -1,0 +1,34 @@
+# RBAC hardening, part 1: a Role with wildcard apiGroups/resources/verbs
+# grants far more than any tenant workload should ever need, and defeats the
+# whole point of scoped view/edit RoleBindings.
+#
+# Matches Role only (namespace-scoped, tenant-authorable) - not ClusterRole,
+# since built-in ClusterRoles like cluster-admin/edit/admin legitimately use
+# wildcards and aren't something a tenant creates anyway.
+#
+# deny: no tenant namespace has any Role today (teams-operator only ever
+# creates RoleBindings to the built-in view/edit ClusterRoles) - this can't
+# newly break anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenywildcardrole
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyWildcardRole
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenywildcardrole
+
+        violation[{"msg": msg}] {
+          rule := input.review.object.rules[_]
+          field := ["apiGroups", "resources", "verbs"][_]
+          v := rule[field][_]
+          v == "*"
+          msg := sprintf("Role %v must not use a wildcard in rules[].%v", [input.review.object.metadata.name, field])
+        }

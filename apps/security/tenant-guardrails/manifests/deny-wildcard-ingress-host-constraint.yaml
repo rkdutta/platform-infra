@@ -1,0 +1,16 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyWildcardIngressHost
+metadata:
+  name: tenant-deny-wildcard-ingress-host
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["networking.k8s.io"]
+        kinds: ["Ingress"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists

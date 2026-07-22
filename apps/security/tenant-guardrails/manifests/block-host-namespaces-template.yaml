@@ -1,0 +1,36 @@
+# Pod Security Context, part 3: hostNetwork/hostPID/hostIPC let a pod see or
+# join the node's own namespaces - a direct sandbox-escape vector, and never
+# needed by an ordinary tenant workload.
+#
+# deny: no tenant workload uses any of these today - this can't newly break
+# anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockhostnamespaces
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockHostNamespaces
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockhostnamespaces
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.hostNetwork == true
+          msg := "pod must not use spec.hostNetwork"
+        }
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.hostPID == true
+          msg := "pod must not use spec.hostPID"
+        }
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.hostIPC == true
+          msg := "pod must not use spec.hostIPC"
+        }

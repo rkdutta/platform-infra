@@ -1,0 +1,36 @@
+# Image hygiene, part 3: production workloads should pin by digest
+# (image@sha256:...), not just a version tag - a tag can be re-pushed to
+# point at different bytes, a digest cannot.
+#
+# Scope: matches namespaces labeled "environment: production" - a labeling
+# convention this cluster hasn't adopted yet (see require-governance-labels),
+# so this constraint matches nothing today. It's here so the policy exists
+# and audits from the moment that label starts being used, rather than
+# needing a new policy written later.
+#
+# dryrun: no current image is digest-pinned - this documents intent for when
+# the environment label is adopted, not an enforceable gate today.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredigestproduction
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireDigestProduction
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredigestproduction
+
+        all_containers[c] { c := input.review.object.spec.containers[_] }
+        all_containers[c] { c := input.review.object.spec.initContainers[_] }
+
+        violation[{"msg": msg}] {
+          c := all_containers[_]
+          not contains(c.image, "@sha256:")
+          msg := sprintf("container <%v> image %v must be pinned by digest (@sha256:...) in a production namespace", [c.name, c.image])
+        }

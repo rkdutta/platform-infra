@@ -1,0 +1,37 @@
+# RBAC hardening, part 3: a ServiceAccount that doesn't set
+# automountServiceAccountToken forces every pod using it to implicitly
+# automount an API token (the Kubernetes default) - this requires the
+# decision be made explicitly (true if genuinely needed, false otherwise),
+# not left to the implicit default.
+#
+# dryrun: the default ServiceAccount in team-jack-dev/team-jack-default
+# doesn't set this field explicitly today (it only carries the harbor-pull
+# imagePullSecret - see teams-operator's ensure_default_sa_pull_secret).
+# Flipping this to deny would block that same operator reconciliation the
+# next time it patches these ServiceAccounts. Audit first, then have
+# teams-operator set the field explicitly before flipping to deny.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireexplicitautomount
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireExplicitAutomount
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireexplicitautomount
+
+        violation[{"msg": msg}] {
+          obj := input.review.object
+          not has_field(obj, "automountServiceAccountToken")
+          msg := sprintf("ServiceAccount %v must explicitly set automountServiceAccountToken (true or false)", [obj.metadata.name])
+        }
+
+        has_field(obj, field) {
+          _ = obj[field]
+        }

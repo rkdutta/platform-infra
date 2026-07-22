@@ -1,0 +1,37 @@
+# Tenant isolation, part 5: a tenant identity should never be able to create
+# cluster-scoped objects (RBAC that reaches outside its own namespace, or a
+# CRD that adds cluster-wide API surface). This is defense-in-depth, not the
+# primary control - teams-api's authorization model only ever grants
+# view/edit RoleBindings scoped to a team's own namespaces (see
+# teams-operator's sync_namespace_rbac), so native RBAC already denies this;
+# this constraint catches it a second way and gives an explicit audit trail.
+#
+# Identifies "a tenant identity" by ServiceAccount name convention
+# (system:serviceaccount:team-*:*), matching how teams-operator names the
+# namespaces it creates - not by anything an admin's own (human) OIDC
+# identity would ever match.
+#
+# deny: this is a pure admission-time behavioral check with no existing-
+# state dependency - no tenant identity creates cluster-scoped resources
+# today, so there's nothing to newly break.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenytenantclusterresources
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyTenantClusterResources
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenytenantclusterresources
+
+        violation[{"msg": msg}] {
+          user := input.review.userInfo.username
+          startswith(user, "system:serviceaccount:team-")
+          msg := sprintf("tenant identity %v must not create cluster-scoped %v resources", [user, input.review.kind.kind])
+        }

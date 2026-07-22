@@ -1,0 +1,39 @@
+# Governance, part 1: every tenant namespace should carry team/owner/
+# cost-center/environment labels so chargeback and audit tooling can
+# attribute spend and incidents without a manual lookup.
+#
+# dryrun: teams-operator today only stamps app.kubernetes.io/managed-by and
+# teams.example.com/team-id / team-name on namespaces it creates - owner,
+# cost-center, and environment aren't collected anywhere yet. Audit first,
+# then extend teams-operator's create_namespace (or an onboarding step) to
+# set them before flipping to deny.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiregovernancelabels
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireGovernanceLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            requiredLabels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiregovernancelabels
+
+        violation[{"msg": msg}] {
+          label := input.parameters.requiredLabels[_]
+          labels := object.get(input.review.object.metadata, "labels", {})
+          not labels[label]
+          msg := sprintf("namespace %v must set label %v", [input.review.object.metadata.name, label])
+        }

@@ -1,0 +1,18 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireGovernanceLabels
+metadata:
+  name: tenant-require-governance-labels
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  parameters:
+    requiredLabels: ["team", "owner", "cost-center", "environment"]

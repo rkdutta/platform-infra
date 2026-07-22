@@ -1,0 +1,30 @@
+# RBAC hardening, part 2: a RoleBinding inside a tenant namespace must never
+# reference the cluster-admin ClusterRole - that would hand namespace-scoped
+# tenant actions the same authority as the platform's own admin binding
+# (teams-admins, managed separately by teams-operator from teams-api's
+# admin list). This only matches RoleBinding (namespace-scoped), so it
+# doesn't touch that legitimate cluster-wide ClusterRoleBinding at all.
+#
+# deny: no tenant namespace has a RoleBinding to cluster-admin today (only
+# the static teams-sync-viewer/-maintainer bindings to view/edit) - this
+# can't newly break anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenytenantclusteradminbinding
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyTenantClusterAdminBinding
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenytenantclusteradminbinding
+
+        violation[{"msg": msg}] {
+          input.review.object.roleRef.name == "cluster-admin"
+          msg := sprintf("RoleBinding %v must not bind to cluster-admin", [input.review.object.metadata.name])
+        }

@@ -1,0 +1,43 @@
+# Tenant guardrails: pod security, image hygiene, resource/network governance,
+# ingress, RBAC hardening, and metadata policies for team namespaces (matched
+# via the teams.example.com/team-id namespace label teams-operator stamps).
+#
+# Split enforcement by risk (see individual constraint files for rationale):
+#   deny   - pure admission-time hygiene with no existing-state dependency;
+#            current tenant workloads already comply, so this can't newly
+#            break anything.
+#   dryrun - depends on namespace-level setup tenants don't have yet
+#            (ResourceQuota/LimitRange/NetworkPolicy presence, governance
+#            labels, PDBs) - audits without blocking until that's backfilled.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tenant-guardrails
+  namespace: argocd
+  annotations:
+    # Apply after gatekeeper itself (needs its CRDs) - same wave as the other
+    # gatekeeper-policy apps (trivy-gatekeeper, image-policy, ratify-config).
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: security
+spec:
+  project: security
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/security/tenant-guardrails/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gatekeeper-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,41 @@
+# Ingress, part 1: tenant Ingresses must use an allow-listed IngressClass -
+# this cluster only routes tenant traffic through the shared nginx ingress
+# controller, so nothing else should be requestable.
+#
+# deny: every tenant Ingress already uses ingressClassName: nginx - this
+# can't newly break anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireingressclass
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireIngressClass
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedClasses:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireingressclass
+
+        violation[{"msg": msg}] {
+          class := input.review.object.spec.ingressClassName
+          allowed := {a | a := input.parameters.allowedClasses[_]}
+          not allowed[class]
+          msg := sprintf("Ingress %v uses ingressClassName %v, which is not on the allow-list", [input.review.object.metadata.name, class])
+        }
+
+        violation[{"msg": msg}] {
+          not input.review.object.spec.ingressClassName
+          msg := sprintf("Ingress %v must set spec.ingressClassName", [input.review.object.metadata.name])
+        }

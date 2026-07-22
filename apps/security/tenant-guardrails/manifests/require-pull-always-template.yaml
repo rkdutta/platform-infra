@@ -1,0 +1,32 @@
+# Image hygiene, part 2: if an image reference is a mutable tag (not pinned
+# by digest), imagePullPolicy must be Always - otherwise a node with a stale
+# cached layer silently runs old bytes under a tag that looks current.
+#
+# dryrun: current tenant workloads use imagePullPolicy: IfNotPresent with
+# mutable tags today - flipping this to deny would immediately fail their
+# next rollout. Audit first, then backfill imagePullPolicy: Always and flip.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirepullalways
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequirePullAlways
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirepullalways
+
+        all_containers[c] { c := input.review.object.spec.containers[_] }
+        all_containers[c] { c := input.review.object.spec.initContainers[_] }
+
+        violation[{"msg": msg}] {
+          c := all_containers[_]
+          not contains(c.image, "@sha256:")
+          not c.imagePullPolicy == "Always"
+          msg := sprintf("container <%v> uses a mutable tag (%v) and must set imagePullPolicy: Always", [c.name, c.image])
+        }

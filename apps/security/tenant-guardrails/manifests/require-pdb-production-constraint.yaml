@@ -1,0 +1,21 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequirePdbProduction
+metadata:
+  name: tenant-require-pdb-production
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: environment
+          operator: In
+          values: ["production"]
+  parameters:
+    minReplicas: 2

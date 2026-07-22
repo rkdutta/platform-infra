@@ -1,0 +1,26 @@
+# Pod Security Context, part 4: hostPath volumes give a pod read/write access
+# to the node's filesystem - one of the most common container-escape vectors.
+#
+# deny: no tenant workload uses hostPath today (only emptyDir) - this can't
+# newly break anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockhostpath
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockHostPath
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockhostpath
+
+        violation[{"msg": msg}] {
+          v := input.review.object.spec.volumes[_]
+          v.hostPath
+          msg := sprintf("volume <%v> must not use hostPath", [v.name])
+        }

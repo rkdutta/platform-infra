@@ -1,0 +1,57 @@
+# Governance, part 2: a workload tagged production should keep a minimum
+# replica count and have a PodDisruptionBudget, so a node drain or voluntary
+# eviction can't take it fully down.
+#
+# Scope: matches namespaces labeled "environment: production" - the same
+# labeling convention require-digest-production and
+# require-governance-labels depend on, which this cluster hasn't adopted
+# yet, so this constraint matches nothing today (documents intent for when
+# it is).
+#
+# dryrun: no workload has a PodDisruptionBudget today - this is audit-only
+# intent until the environment label is adopted and PDBs are backfilled.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirepdbproduction
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequirePdbProduction
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            minReplicas:
+              type: integer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirepdbproduction
+
+        violation[{"msg": msg}] {
+          replicas := input.review.object.spec.replicas
+          min_replicas := object.get(input.parameters, "minReplicas", 2)
+          replicas < min_replicas
+          msg := sprintf("%v %v is tagged production and must run at least %v replicas (has %v)", [input.review.object.kind, input.review.object.metadata.name, min_replicas, replicas])
+        }
+
+        violation[{"msg": msg}] {
+          ns := input.review.object.metadata.namespace
+          name := input.review.object.metadata.name
+          not has_covering_pdb(ns, name)
+          msg := sprintf("%v %v is tagged production and must have a PodDisruptionBudget", [input.review.object.kind, name])
+        }
+
+        # Existence rule + `not` rather than object.get()+count(): see
+        # require-resource-quota-template.yaml for why - the latter stays
+        # undefined (not 0) when the whole namespace path is missing from
+        # data.inventory, which is exactly the "zero PodDisruptionBudgets"
+        # case this rule exists to catch.
+        has_covering_pdb(ns, name) {
+          p := data.inventory.namespace[ns]["policy/v1"]["PodDisruptionBudget"][_]
+          p.spec.selector.matchLabels.app == name
+        }

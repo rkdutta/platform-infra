@@ -1,0 +1,40 @@
+# Tenant isolation, part 3: every container must declare its own
+# requests/limits explicitly - an unbounded container can starve its
+# namespace-mates even where a LimitRange default exists.
+#
+# deny: current tenant workloads already set requests and limits on every
+# container - this can't newly break anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirecontainerresources
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireContainerResources
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirecontainerresources
+
+        all_containers[c] { c := input.review.object.spec.containers[_] }
+        all_containers[c] { c := input.review.object.spec.initContainers[_] }
+
+        required := ["cpu", "memory"]
+
+        violation[{"msg": msg}] {
+          c := all_containers[_]
+          field := required[_]
+          not c.resources.requests[field]
+          msg := sprintf("container <%v> must set resources.requests.%v", [c.name, field])
+        }
+
+        violation[{"msg": msg}] {
+          c := all_containers[_]
+          field := required[_]
+          not c.resources.limits[field]
+          msg := sprintf("container <%v> must set resources.limits.%v", [c.name, field])
+        }

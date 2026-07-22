@@ -1,0 +1,14 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyTenantClusterResources
+metadata:
+  name: tenant-deny-cluster-resources
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        kinds: ["ClusterRole", "ClusterRoleBinding"]
+      - apiGroups: ["apiextensions.k8s.io"]
+        kinds: ["CustomResourceDefinition"]

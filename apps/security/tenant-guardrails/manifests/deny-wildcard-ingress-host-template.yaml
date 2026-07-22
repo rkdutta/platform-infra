@@ -1,0 +1,28 @@
+# Ingress, part 2: a wildcard host (e.g. "*.example.com") on a tenant Ingress
+# can shadow or hijack traffic meant for another tenant's hostname on the
+# same shared ingress controller.
+#
+# deny: no tenant Ingress uses a wildcard host today (each is a concrete
+# name like demo-api-go.127.0.0.1.sslip.io) - this can't newly break
+# anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenywildcardingresshost
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyWildcardIngressHost
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenywildcardingresshost
+
+        violation[{"msg": msg}] {
+          rule := input.review.object.spec.rules[_]
+          contains(rule.host, "*")
+          msg := sprintf("Ingress %v must not use a wildcard host (%v)", [input.review.object.metadata.name, rule.host])
+        }

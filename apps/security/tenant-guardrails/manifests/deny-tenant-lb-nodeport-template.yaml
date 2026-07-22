@@ -1,0 +1,28 @@
+# Ingress, part 4: tenant Services should never be LoadBalancer or NodePort -
+# all tenant traffic is meant to route through the shared ingress controller,
+# not get its own external exposure per-namespace.
+#
+# deny: every tenant Service is already ClusterIP - this can't newly break
+# anything that's already compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenytenantlbnodeport
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyTenantLbNodeport
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenytenantlbnodeport
+
+        violation[{"msg": msg}] {
+          disallowed := {"LoadBalancer", "NodePort"}
+          t := input.review.object.spec.type
+          disallowed[t]
+          msg := sprintf("Service %v must not be type %v in a tenant namespace", [input.review.object.metadata.name, t])
+        }

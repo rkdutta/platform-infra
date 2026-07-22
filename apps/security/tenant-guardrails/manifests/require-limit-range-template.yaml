@@ -1,0 +1,37 @@
+# Tenant isolation, part 2: a LimitRange gives every container in a
+# namespace a sane default request/limit even if its own spec forgets one -
+# a backstop under require-container-resources's explicit-is-better rule.
+#
+# dryrun: no tenant namespace has a LimitRange today - flipping this to deny
+# would block every future pod in team-jack-dev/team-jack-default until
+# ranges are backfilled. Audit first.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirelimitrange
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireLimitRange
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirelimitrange
+
+        # See require-resource-quota-template.yaml for why this uses an
+        # existence rule + `not` rather than object.get()+count(): the
+        # latter stays undefined (not 0) when the whole namespace path is
+        # missing from data.inventory, which is exactly the "zero
+        # LimitRanges" case this rule exists to catch.
+        violation[{"msg": msg}] {
+          ns := input.review.object.metadata.namespace
+          not has_limitrange(ns)
+          msg := sprintf("namespace %v must have a LimitRange", [ns])
+        }
+
+        has_limitrange(ns) {
+          data.inventory.namespace[ns]["v1"]["LimitRange"][_]
+        }

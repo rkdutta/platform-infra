@@ -1,6 +1,16 @@
 # Make Gatekeeper cache Trivy's VulnerabilityReport CRDs so referential
 # constraints can read them (via data.inventory). Plus RBAC so Gatekeeper's
 # audit/controller can list/watch those reports.
+#
+# Config is a Gatekeeper singleton (one object, name "config"), so every
+# referential constraint in the cluster shares this same list regardless of
+# which Argo app "owns" this file - the ResourceQuota/LimitRange/NetworkPolicy
+# entries below exist for apps/security/tenant-guardrails's referential
+# constraints (require-resource-quota, require-limit-range,
+# require-network-policy), not this app. No extra RBAC needed for those three:
+# they're core resources, already covered by gatekeeper-manager-role's
+# existing get/list/watch on apiGroups:["*"]/resources:["*"] (bound to the
+# same gatekeeper-admin ServiceAccount as the CRD-specific reader below).
 apiVersion: config.gatekeeper.sh/v1alpha1
 kind: Config
 metadata:
@@ -12,6 +22,18 @@ spec:
       - group: "aquasecurity.github.io"
         version: "v1alpha1"
         kind: "VulnerabilityReport"
+      - group: ""
+        version: "v1"
+        kind: "ResourceQuota"
+      - group: ""
+        version: "v1"
+        kind: "LimitRange"
+      - group: "networking.k8s.io"
+        version: "v1"
+        kind: "NetworkPolicy"
+      - group: "policy"
+        version: "v1"
+        kind: "PodDisruptionBudget"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

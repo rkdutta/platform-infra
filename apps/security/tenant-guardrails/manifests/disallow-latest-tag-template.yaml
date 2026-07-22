@@ -1,0 +1,48 @@
+# Image hygiene, part 1: ":latest" (or no tag at all, which defaults to it)
+# is a mutable pointer - the same manifest can resolve to different bytes on
+# every pull, breaking reproducibility and rollback.
+#
+# deny: current tenant workloads already use explicit semver tags (e.g.
+# demo-api-go:2.2.0) - this can't newly break anything that's already
+# compliant.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowlatesttag
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowLatestTag
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdisallowlatesttag
+
+        all_containers[c] { c := input.review.object.spec.containers[_] }
+        all_containers[c] { c := input.review.object.spec.initContainers[_] }
+
+        violation[{"msg": msg}] {
+          c := all_containers[_]
+          img := c.image
+          not contains(img, "@sha256:")
+          is_latest_or_untagged(img)
+          msg := sprintf("container <%v> image %v must use an explicit version tag, not :latest / no tag", [c.name, img])
+        }
+
+        # Only the final path segment (after the last '/') can hold a tag -
+        # keeps a "registry:port/..." prefix from being mistaken for one.
+        is_latest_or_untagged(img) {
+          segs := split(img, "/")
+          last := segs[count(segs) - 1]
+          not contains(last, ":")
+        }
+
+        is_latest_or_untagged(img) {
+          segs := split(img, "/")
+          last := segs[count(segs) - 1]
+          parts := split(last, ":")
+          parts[count(parts) - 1] == "latest"
+        }
