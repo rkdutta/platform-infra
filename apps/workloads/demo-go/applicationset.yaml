@@ -47,7 +47,7 @@ spec:
         path: deploy
       destination:
         server: https://kubernetes.default.svc
-        namespace: team-sss
+        namespace: team-jack-dev
       syncPolicy:
         automated:
           prune: true
