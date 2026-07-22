@@ -44,6 +44,18 @@ spec:
         # self-signed platform-tls CA via SSL_CERT_DIR below.
         oras:
           useHttp: false
+          # Harbor's `platform` project is private (same as every other
+          # in-cluster puller - see harbor-pull elsewhere in this repo), so
+          # Ratify's own outbound registry calls need credentials too, not
+          # just kubelet's. k8Secrets resolves them from the ratify-admin
+          # ServiceAccount's own imagePullSecrets (same mechanism kubelet
+          # uses) - see the ratify-harbor-pull Secret + the SA patch that
+          # attaches it (bootstrap/README.md's robot-account pattern, a
+          # separate pull-only robot scoped to this ServiceAccount).
+          # Without this, Ratify 401s on every Harbor pull before it ever
+          # gets to checking a signature.
+          authProviders:
+            k8secretsEnabled: true
 
         # Add the mounted platform-tls CA (/etc/ratify-ca) on top of the image's
         # built-in public roots, so oras pulls Harbor over HTTPS AND cosign can
