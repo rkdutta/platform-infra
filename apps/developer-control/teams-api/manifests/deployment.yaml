@@ -39,7 +39,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: teams-api
-        image: harbor.127.0.0.1.sslip.io/platform/teams-api:2.0.18
+        image: harbor.127.0.0.1.sslip.io/platform/teams-api:2.0.19
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
