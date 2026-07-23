@@ -73,6 +73,12 @@ rules:
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]
   verbs: ["create"]
+# Per-namespace openbao-agent-config ConfigMap (see ensure_openbao_access) —
+# same create-if-missing reasoning as resourcequotas above. Nothing else in
+# the operator has needed to create a ConfigMap before now.
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

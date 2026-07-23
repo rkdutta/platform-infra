@@ -2,11 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Turns this directory from a plain-manifest source into a Kustomize one so
-# the quota-templates/*.yaml, limitrange-templates/*.yaml and
-# networkpolicy-templates/*.yaml files can be packaged into ConfigMaps
-# without copy/pasting their content into a manifest by hand (same pattern
-# already used by apps/security/falco/rules and
-# apps/integration-delivery/harbor-replication/manifests).
+# the quota-templates/*.yaml, limitrange-templates/*.yaml,
+# networkpolicy-templates/*.yaml and openbao-*-templates/* files can be
+# packaged into ConfigMaps without copy/pasting their content into a
+# manifest by hand (same pattern already used by apps/security/falco/rules
+# and apps/integration-delivery/harbor-replication/manifests).
 namespace: engineering-platform
 
 resources:
@@ -34,6 +34,23 @@ configMapGenerator:
   - name: teams-operator-networkpolicy-templates
     files:
       - networkpolicy-templates/default.yaml
+  # OpenBao access templates (see ensure_openbao_access in teams_operator.py).
+  # Unlike the three above, these aren't rendered into typed Kubernetes
+  # objects - the policy/role templates become OpenBao HTTP API request
+  # bodies (HCL/JSON text, not YAML), and the agentconfig templates become
+  # the data keys of a per-namespace `openbao-agent-config` ConfigMap that
+  # tenant pods mount (see apps/security/tenant-guardrails's
+  # openbao-spiffe-volume-*.yaml mutations).
+  - name: teams-operator-openbao-policy-templates
+    files:
+      - openbao-policy-templates/team.hcl
+  - name: teams-operator-openbao-role-templates
+    files:
+      - openbao-role-templates/team.json
+  - name: teams-operator-openbao-agentconfig-templates
+    files:
+      - openbao-agentconfig-templates/spiffe-helper.conf
+      - openbao-agentconfig-templates/agent.hcl
 
 generatorOptions:
   # Keep stable names so deployment.yaml's volumes can reference them

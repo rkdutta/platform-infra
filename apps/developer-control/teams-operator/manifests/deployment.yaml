@@ -3,6 +3,16 @@
 # apps/integration-delivery/harbor-replication/). `platform` is a private
 # project, hence imagePullSecrets: harbor-pull (a Harbor robot account,
 # created out-of-band — see bootstrap/README.md).
+#
+# Also carries its own SPIFFE identity (spiffe-workload-api CSI volume +
+# spiffe-helper sidecar, writing a JWT-SVID to operator-spiffe-shared) so it
+# can authenticate to OpenBao itself, via the *same* trust chain tenant
+# workloads get from apps/security/tenant-guardrails's openbao-*.yaml
+# mutations — just with a more privileged role (teams-operator-admin,
+# bootstrapped once out-of-band — see bootstrap/README.md) that lets it
+# manage per-namespace policies/roles (ensure_openbao_access in
+# teams_operator.py). engineering-platform isn't a tenant namespace, so the
+# mutations don't touch this Deployment — added by hand instead.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -53,6 +63,17 @@ spec:
               name: harbor-pull
               key: .dockerconfigjson
               optional: true
+        # OpenBao access (see ensure_openbao_access / OpenBaoClient in
+        # teams_operator.py). OPENBAO_JWT_PATH is where the spiffe-helper
+        # sidecar below writes this pod's own JWT-SVID; OPENBAO_ROLE is the
+        # operator's own (privileged) JWT auth role, bootstrapped once
+        # out-of-band — see bootstrap/README.md.
+        - name: OPENBAO_ADDR
+          value: "http://openbao.openbao.svc.cluster.local:8200"
+        - name: OPENBAO_JWT_PATH
+          value: "/operator-shared/spiffe-jwt"
+        - name: OPENBAO_ROLE
+          value: "teams-operator-admin"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -99,6 +120,56 @@ spec:
         - name: networkpolicy-templates
           mountPath: /app/networkpolicy-templates
           readOnly: true
+        # OpenBao access templates (see manifests/openbao-*-templates/).
+        # ensure_openbao_access in teams_operator.py renders these per
+        # tenant namespace at apply time - same reasoning as the three
+        # above, except the policy/role templates become OpenBao HTTP API
+        # bodies rather than Kubernetes objects.
+        - name: openbao-policy-templates
+          mountPath: /app/openbao-policy-templates
+          readOnly: true
+        - name: openbao-role-templates
+          mountPath: /app/openbao-role-templates
+          readOnly: true
+        - name: openbao-agentconfig-templates
+          mountPath: /app/openbao-agentconfig-templates
+          readOnly: true
+        # Read-only access to this pod's own JWT-SVID (written by the
+        # spiffe-helper sidecar below) so OpenBaoClient can log in.
+        - name: operator-spiffe-shared
+          mountPath: /operator-shared
+          readOnly: true
+      # spiffe-helper: fetches this pod's own JWT-SVID (audience "openbao")
+      # via the SPIFFE Workload API and writes it to operator-spiffe-shared —
+      # same mechanism (and config file) tenant pods get from
+      # apps/security/tenant-guardrails's openbao-sidecar-*.yaml mutations,
+      # just without the openbao-agent proxy sidecar: the operator's own
+      # OpenBaoClient (teams_operator.py) reads the JWT and calls OpenBao's
+      # HTTP API directly, since it needs to POST arbitrary policy/role
+      # bodies, not just proxy KV reads/writes.
+      - name: spiffe-helper
+        image: ghcr.io/spiffe/spiffe-helper:0.9.1
+        args: ["-config", "/app/openbao-agentconfig-templates/spiffe-helper.conf"]
+        volumeMounts:
+          - name: spiffe-workload-api
+            mountPath: /spiffe-workload-api
+            readOnly: true
+          - name: operator-spiffe-shared
+            mountPath: /shared
+          - name: openbao-agentconfig-templates
+            mountPath: /app/openbao-agentconfig-templates
+            readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
       volumes:
       - name: quota-templates
         configMap:
@@ -109,3 +180,18 @@ spec:
       - name: networkpolicy-templates
         configMap:
           name: teams-operator-networkpolicy-templates
+      - name: openbao-policy-templates
+        configMap:
+          name: teams-operator-openbao-policy-templates
+      - name: openbao-role-templates
+        configMap:
+          name: teams-operator-openbao-role-templates
+      - name: openbao-agentconfig-templates
+        configMap:
+          name: teams-operator-openbao-agentconfig-templates
+      - name: spiffe-workload-api
+        csi:
+          driver: csi.spiffe.io
+          readOnly: true
+      - name: operator-spiffe-shared
+        emptyDir: {}

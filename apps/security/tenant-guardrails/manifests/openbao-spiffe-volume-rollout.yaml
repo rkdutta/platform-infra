@@ -1,0 +1,89 @@
+# Same as openbao-spiffe-volume-deployment.yaml, for Argo Rollouts - the kind
+# every current tenant workload (demo-api-go, demo-web-go, demo-api-py,
+# demo-web-py) actually uses.
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: openbao-spiffe-csi-volume-rollout
+spec:
+  applyTo:
+    - groups: ["argoproj.io"]
+      kinds: ["Rollout"]
+      versions: ["v1alpha1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.volumes[name: spiffe-workload-api]"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.volumes[name: spiffe-workload-api]"
+        condition: MustNotExist
+    assign:
+      value:
+        name: spiffe-workload-api
+        csi:
+          driver: csi.spiffe.io
+          readOnly: true
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: openbao-agent-shared-volume-rollout
+spec:
+  applyTo:
+    - groups: ["argoproj.io"]
+      kinds: ["Rollout"]
+      versions: ["v1alpha1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.volumes[name: openbao-agent-shared]"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.volumes[name: openbao-agent-shared]"
+        condition: MustNotExist
+    assign:
+      value:
+        name: openbao-agent-shared
+        emptyDir: {}
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: openbao-agent-config-volume-rollout
+spec:
+  applyTo:
+    - groups: ["argoproj.io"]
+      kinds: ["Rollout"]
+      versions: ["v1alpha1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.volumes[name: openbao-agent-config]"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.volumes[name: openbao-agent-config]"
+        condition: MustNotExist
+    assign:
+      value:
+        name: openbao-agent-config
+        configMap:
+          name: openbao-agent-config

@@ -101,6 +101,97 @@ Wait for the StatefulSet to recreate `openbao-0` with a fresh PVC (`bao
 status` should show `Initialized: false`), then redo the init + unseal +
 Secret steps above.
 
+## OpenBao — enable KV + JWT auth for team-* secrets (SPIFFE trust)
+
+One-time setup so `team-*` workloads can read/write secrets in OpenBao
+using their SPIRE-issued identity — no static credential anywhere. See
+`apps/security/tenant-guardrails/manifests/openbao-*.yaml` (the mutations
+that give every tenant pod a JWT-SVID + an `openbao-agent` sidecar) and
+`teams_operator.py`'s `ensure_openbao_access` (which creates the
+per-namespace policy/role/agent-config as namespaces are provisioned). All
+commands below run with the root token from `bootstrap/init-keys.json`
+(`BAO_TOKEN=$(jq -r '.root_token' bootstrap/init-keys.json)`).
+
+```sh
+BAO_TOKEN=$(jq -r '.root_token' bootstrap/init-keys.json)
+
+# 1) KV-v2 mount for every team's secrets, isolated by path + policy (see
+#    openbao-policy-templates/team.hcl) rather than one mount per team.
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao secrets enable -path=kv-teams kv-v2"
+
+# 2) JWT auth method, trusting SPIRE's OIDC discovery provider as the JWKS
+#    source. That provider serves its JWKS over HTTPS using its own SPIFFE
+#    X.509-SVID as the TLS cert (not a public-CA cert) — so OpenBao needs
+#    the SPIRE trust bundle's CA to validate that connection.
+#
+#    The `spire-bundle` ConfigMap holds a SPIFFE JWKS bundle (JSON), not a
+#    ready PEM file — extract the x509-svid entries' certs into PEM first.
+kubectl get cm spire-bundle -n spire-server -o jsonpath='{.data.bundle\.spiffe}' \
+  > /tmp/bundle.spiffe.json
+python3 - /tmp/bundle.spiffe.json > /tmp/spire-bundle.pem <<'PYEOF'
+import json, sys, textwrap
+with open(sys.argv[1]) as f:
+    bundle = json.load(f)
+for key in bundle.get("keys", []):
+    if key.get("use") == "x509-svid":
+        for der_b64 in key.get("x5c", []):
+            print("-----BEGIN CERTIFICATE-----")
+            print("\n".join(textwrap.wrap(der_b64, 64)))
+            print("-----END CERTIFICATE-----")
+PYEOF
+
+kubectl -n openbao exec -i openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao auth enable jwt"
+kubectl -n openbao cp /tmp/spire-bundle.pem openbao-0:/tmp/spire-bundle.pem
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/jwt/config \
+     oidc_discovery_url=https://spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local \
+     oidc_discovery_ca_pem=@/tmp/spire-bundle.pem"
+```
+
+**This bundle is short-lived (SPIRE's default root rotates roughly daily in
+this cluster — confirmed by inspecting the extracted certs' validity
+window) — `oidc_discovery_ca_pem` above will go stale and JWT logins will
+start failing with a TLS trust error.** Re-run the extraction + `bao write
+auth/jwt/config` step whenever that happens (no watcher automates this
+today — same class of manual-refresh caveat as `platform-tls` below).
+
+```sh
+# 3) Bootstrap the operator's own trust — chicken-and-egg: teams-operator
+#    creates every team-<namespace> policy/role itself once it's running
+#    (ensure_openbao_access), but it needs its *own* role to exist first.
+#    bound_claims.sub matches this Deployment's own SPIFFE ID (see
+#    apps/developer-control/teams-operator/manifests/deployment.yaml's
+#    spiffe-helper sidecar — same trust chain as tenant workloads, just
+#    scoped to a management policy instead of one namespace's KV path).
+kubectl -n openbao exec -i openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao policy write teams-operator-admin-policy -" <<'EOF'
+path "sys/policies/acl/team-*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+path "auth/jwt/role/team-*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+EOF
+
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/jwt/role/teams-operator-admin \
+     role_type=jwt \
+     bound_audiences=openbao \
+     user_claim=sub \
+     bound_claims_type=glob \
+     bound_claims=sub=spiffe://platform.local/ns/engineering-platform/sa/teams-operator \
+     token_policies=teams-operator-admin-policy \
+     token_ttl=15m token_max_ttl=1h"
+```
+
+From then on `teams-operator` creates every `team-<namespace>` policy/role
+as namespaces are provisioned — no further manual OpenBao steps for new
+teams. A full cluster/PVC recreate wipes this configuration along with
+everything else in OpenBao's storage (same as the KV init above) — redo
+steps 1–3 after that.
+
 ## `platform-tls` — the wildcard cert for `*.127.0.0.1.sslip.io`
 
 Every app exposed over HTTPS (OpenBao, Keycloak, Harbor, teams-api, teams-app)

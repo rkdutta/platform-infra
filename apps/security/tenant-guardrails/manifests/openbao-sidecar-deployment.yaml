@@ -1,0 +1,122 @@
+# Injects the two sidecars that turn the volumes from
+# openbao-spiffe-volume-deployment.yaml into actual OpenBao access, with zero
+# app-container changes:
+#
+# 1. spiffe-helper: fetches a JWT-SVID from the SPIRE Workload API (audience
+#    "openbao", daemon-mode default true so it keeps rotating - JWT-SVIDs are
+#    short-lived), writes it to /shared/spiffe-jwt.
+# 2. openbao-agent: `bao agent` in auto_auth mode, reading that JWT file,
+#    logging into OpenBao's jwt auth method (role = this namespace's
+#    team-<namespace> role - see teams-operator's openbao-agentconfig-
+#    templates), and running an api_proxy on 127.0.0.1:8207. The app
+#    container talks to OpenBao by calling that local proxy - the sidecar
+#    attaches the auth token transparently, so the app never handles a
+#    token or knows SPIFFE/OpenBao exist.
+#
+# Both containers' config comes from the openbao-agent-config ConfigMap
+# (mounted by the volume mutation), rendered per namespace by teams-operator
+# (ensure_openbao_access) - NOT baked in here, so a namespace's role name
+# doesn't need to be known at admission time.
+#
+# Verified empirically (scratch Deployment + scratch Assign, since nothing
+# else in this repo relied on Gatekeeper inserting a *new* list item by name
+# before now - see openbao-spiffe-volume-deployment.yaml's header) that
+# `pathTests: MustNotExist` + a full container object in `assign.value` does
+# append a new container, not just mutate an existing one.
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: openbao-spiffe-helper-sidecar-deployment
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.containers[name: spiffe-helper]"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.containers[name: spiffe-helper]"
+        condition: MustNotExist
+    assign:
+      value:
+        name: spiffe-helper
+        image: ghcr.io/spiffe/spiffe-helper:0.9.1
+        args: ["-config", "/etc/openbao-agent/spiffe-helper.conf"]
+        volumeMounts:
+          - name: spiffe-workload-api
+            mountPath: /spiffe-workload-api
+            readOnly: true
+          - name: openbao-agent-shared
+            mountPath: /shared
+          - name: openbao-agent-config
+            mountPath: /etc/openbao-agent
+            readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: openbao-agent-sidecar-deployment
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.containers[name: openbao-agent]"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.containers[name: openbao-agent]"
+        condition: MustNotExist
+    assign:
+      value:
+        name: openbao-agent
+        image: quay.io/openbao/openbao:2.5.5
+        command: ["bao", "agent", "-config=/etc/openbao-agent/agent.hcl"]
+        ports:
+          - name: openbao-proxy
+            containerPort: 8207
+        volumeMounts:
+          - name: openbao-agent-shared
+            mountPath: /shared
+          - name: openbao-agent-config
+            mountPath: /etc/openbao-agent
+            readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi

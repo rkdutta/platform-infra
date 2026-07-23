@@ -1,0 +1,100 @@
+# Same as openbao-sidecar-deployment.yaml, for Argo Rollouts - the kind
+# every current tenant workload (demo-api-go, demo-web-go, demo-api-py,
+# demo-web-py) actually uses.
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: openbao-spiffe-helper-sidecar-rollout
+spec:
+  applyTo:
+    - groups: ["argoproj.io"]
+      kinds: ["Rollout"]
+      versions: ["v1alpha1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.containers[name: spiffe-helper]"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.containers[name: spiffe-helper]"
+        condition: MustNotExist
+    assign:
+      value:
+        name: spiffe-helper
+        image: ghcr.io/spiffe/spiffe-helper:0.9.1
+        args: ["-config", "/etc/openbao-agent/spiffe-helper.conf"]
+        volumeMounts:
+          - name: spiffe-workload-api
+            mountPath: /spiffe-workload-api
+            readOnly: true
+          - name: openbao-agent-shared
+            mountPath: /shared
+          - name: openbao-agent-config
+            mountPath: /etc/openbao-agent
+            readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: Assign
+metadata:
+  name: openbao-agent-sidecar-rollout
+spec:
+  applyTo:
+    - groups: ["argoproj.io"]
+      kinds: ["Rollout"]
+      versions: ["v1alpha1"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["argoproj.io"]
+        kinds: ["Rollout"]
+    namespaceSelector:
+      matchExpressions:
+        - key: teams.example.com/team-id
+          operator: Exists
+  location: "spec.template.spec.containers[name: openbao-agent]"
+  parameters:
+    pathTests:
+      - subPath: "spec.template.spec.containers[name: openbao-agent]"
+        condition: MustNotExist
+    assign:
+      value:
+        name: openbao-agent
+        image: quay.io/openbao/openbao:2.5.5
+        command: ["bao", "agent", "-config=/etc/openbao-agent/agent.hcl"]
+        ports:
+          - name: openbao-proxy
+            containerPort: 8207
+        volumeMounts:
+          - name: openbao-agent-shared
+            mountPath: /shared
+          - name: openbao-agent-config
+            mountPath: /etc/openbao-agent
+            readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
