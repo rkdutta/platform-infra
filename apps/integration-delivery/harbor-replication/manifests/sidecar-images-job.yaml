@@ -1,0 +1,126 @@
+# Idempotent Job that mirrors third-party sidecar images (see
+# sidecar-images.txt) into Harbor's `platform` project via generic
+# docker-registry pull-replication - so tenant-guardrails's OpenBao
+# mutations (apps/security/tenant-guardrails/manifests/openbao-sidecar-
+# *.yaml) can reference Harbor-hosted copies instead of ghcr.io/quay.io
+# directly, which tenant-images-from-harbor would otherwise reject (mutating
+# webhooks run before validating ones, so a Gatekeeper-injected sidecar's
+# image is checked just like any other container's).
+#
+# Same PostSync-hook + idempotent-create-or-update pattern as
+# configure-job.yaml, but a separate Job: that one is a single GHCR
+# (github-ghcr adapter) endpoint scoped to rkdutta/* app repos; this one
+# needs a distinct generic `docker-registry` adapter per third-party source
+# (quay.io isn't GHCR at all; ghcr.io/spiffe/* isn't under the rkdutta
+# owner the other job's adapter is configured for). No credentials needed -
+# both source images are public.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: harbor-configure-sidecar-image-replication
+  namespace: harbor
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  labels:
+    app: harbor-replication
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: harbor-replication
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: sidecar-images
+          configMap:
+            name: harbor-replication-sidecar-images
+      containers:
+        - name: configure
+          image: curlimages/curl:8.11.1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: sidecar-images
+              mountPath: /config
+              readOnly: true
+          env:
+            - name: HARBOR_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ghcr-replication-credentials
+                  key: HARBOR_ADMIN_PASSWORD
+          command: ["/bin/sh", "-eu", "-c"]
+          args:
+            - |
+              API="http://harbor-core/api/v2.0"
+              AUTH="admin:${HARBOR_ADMIN_PASSWORD}"
+
+              first_id() { grep -o '"id":[0-9]\{1,\}' | head -1 | tr -dc '0-9' || true; }
+              pol_id_of() { grep -o "\"id\":[0-9]\{1,\},\"name\":\"$1\"" | head -1 | tr -dc '0-9' || true; }
+
+              echo "waiting for the Harbor API..."
+              i=0
+              while [ "$i" -lt 30 ]; do
+                code=$(curl -s -o /dev/null -w '%{http_code}' -u "$AUTH" "$API/systeminfo" || true)
+                if [ "$code" = "200" ]; then echo "harbor ready"; break; fi
+                i=$((i+1)); echo "  not ready ($code), retry $i/30"; sleep 5
+              done
+
+              # $1 = registry name, $2 = url
+              reg_body() {
+                printf '{"name":"%s","type":"docker-registry","url":"%s","insecure":false}' "$1" "$2"
+              }
+              # $1 = policy name, $2 = repo path (e.g. spiffe/spiffe-helper), $3 = tag, $4 = registry id
+              pol_body() {
+                printf '{"name":"%s","description":"Pull sidecar image %s:%s","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"%s"},{"type":"tag","value":"%s"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 0 */12 * * *"}}}' \
+                  "$1" "$2" "$3" "$4" "$2" "$3"
+              }
+
+              while IFS='|' read -r url repo tag; do
+                case "$url" in ''|'#'*) continue ;; esac
+
+                host=$(echo "$url" | sed -e 's#https\{0,1\}://##' -e 's#/.*##')
+                regname="sidecar-$(echo "$host" | tr '.' '-')"
+
+                reg_id=$(curl -s -u "$AUTH" "$API/registries?name=$regname" | first_id)
+                if [ -z "$reg_id" ]; then
+                  echo "creating registry $regname ($url)"
+                  reg_body "$regname" "$url" | curl -sf -u "$AUTH" -X POST "$API/registries" -H 'Content-Type: application/json' -d @-
+                  reg_id=$(curl -s -u "$AUTH" "$API/registries?name=$regname" | first_id)
+                else
+                  echo "$regname exists (id=$reg_id)"
+                fi
+                echo "$regname id=$reg_id"
+
+                polname="sidecar-$(echo "$repo" | tr '/' '-')"
+                pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
+                if [ -z "$pol_id" ]; then
+                  echo "creating replication policy $polname"
+                  pol_body "$polname" "$repo" "$tag" "$reg_id" | curl -sf -u "$AUTH" -X POST "$API/replication/policies" -H 'Content-Type: application/json' -d @-
+                  pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
+                else
+                  echo "$polname exists (id=$pol_id); updating"
+                  pol_body "$polname" "$repo" "$tag" "$reg_id" | curl -sf -u "$AUTH" -X PUT "$API/replication/policies/$pol_id" -H 'Content-Type: application/json' -d @-
+                fi
+                echo "$polname id=$pol_id"
+
+                if [ -n "$pol_id" ] && [ "$pol_id" -gt 0 ] 2>/dev/null; then
+                  echo "triggering $polname"
+                  printf '{"policy_id":%s}' "$pol_id" | curl -s -u "$AUTH" -X POST "$API/replication/executions" -H 'Content-Type: application/json' -d @- || true
+                else
+                  echo "skipping immediate trigger for $polname (id unresolved: '$pol_id')"
+                fi
+              done < /config/sidecar-images.txt
+
+              echo "sidecar image replication configured."

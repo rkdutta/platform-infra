@@ -7,19 +7,25 @@ namespace: harbor
 
 resources:
   - configure-job.yaml
+  - sidecar-images-job.yaml
 
 # The GHCR->Harbor replication repo list lives in repos.txt and is rendered into
 # a HASH-SUFFIXED ConfigMap (harbor-replication-repos-<hash>), which the
-# configure Job (a PostSync hook) mounts at /config.
+# configure Job (a PostSync hook) mounts at /config. sidecar-images.txt follows
+# the same pattern for sidecar-images-job.yaml.
 #
-# Why this exists: the configure Job is an Argo CD *hook*, and hooks are excluded
-# from Argo's drift diff — so editing the Job (or an inline repo list) never
-# shows as OutOfSync and never triggers a sync. This ConfigMap is a NORMAL
-# tracked resource; because the hash suffix is left ON, editing repos.txt changes
-# the ConfigMap's name, which Argo sees as drift -> it runs a sync -> the PostSync
-# hook re-runs with the new list. That makes repo-list edits reconcile on their
-# own. Kustomize also rewrites the Job's volume reference to the hashed name.
+# Why this exists: the configure Jobs are Argo CD *hooks*, and hooks are excluded
+# from Argo's drift diff — so editing a Job (or an inline list) never shows as
+# OutOfSync and never triggers a sync. These ConfigMaps are NORMAL tracked
+# resources; because the hash suffix is left ON, editing a .txt file changes its
+# ConfigMap's name, which Argo sees as drift -> it runs a sync -> the matching
+# PostSync hook re-runs with the new list. That makes list edits reconcile on
+# their own. Kustomize also rewrites each Job's volume reference to the hashed
+# name.
 configMapGenerator:
   - name: harbor-replication-repos
     files:
       - repos.txt
+  - name: harbor-replication-sidecar-images
+    files:
+      - sidecar-images.txt

@@ -23,6 +23,15 @@
 # before now - see openbao-spiffe-volume-deployment.yaml's header) that
 # `pathTests: MustNotExist` + a full container object in `assign.value` does
 # append a new container, not just mutate an existing one.
+#
+# Both images are Harbor-hosted mirrors (platform/spiffe-helper,
+# platform/openbao), not ghcr.io/quay.io directly - tenant-images-from-harbor
+# denies any container image not from this cluster's Harbor, and validation
+# runs *after* mutation, so a Gatekeeper-injected sidecar is checked exactly
+# like any other container. See apps/integration-delivery/harbor-replication's
+# sidecar-images-job.yaml / sidecar-images.txt for the mirroring (discovered
+# by hitting the real admission denial against a live Rollout, not assumed
+# up front).
 apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
@@ -49,7 +58,7 @@ spec:
     assign:
       value:
         name: spiffe-helper
-        image: ghcr.io/spiffe/spiffe-helper:0.9.1
+        image: harbor.127.0.0.1.sslip.io/platform/spiffe-helper:0.9.1
         args: ["-config", "/etc/openbao-agent/spiffe-helper.conf"]
         volumeMounts:
           - name: spiffe-workload-api
@@ -98,7 +107,7 @@ spec:
     assign:
       value:
         name: openbao-agent
-        image: quay.io/openbao/openbao:2.5.5
+        image: harbor.127.0.0.1.sslip.io/platform/openbao:2.5.5
         command: ["bao", "agent", "-config=/etc/openbao-agent/agent.hcl"]
         ports:
           - name: openbao-proxy

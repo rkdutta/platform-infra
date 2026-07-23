@@ -1,6 +1,7 @@
 # Same as openbao-sidecar-deployment.yaml, for Argo Rollouts - the kind
 # every current tenant workload (demo-api-go, demo-web-go, demo-api-py,
-# demo-web-py) actually uses.
+# demo-web-py) actually uses. See that file's header for why both images
+# are Harbor-hosted mirrors rather than ghcr.io/quay.io directly.
 apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
@@ -27,7 +28,7 @@ spec:
     assign:
       value:
         name: spiffe-helper
-        image: ghcr.io/spiffe/spiffe-helper:0.9.1
+        image: harbor.127.0.0.1.sslip.io/platform/spiffe-helper:0.9.1
         args: ["-config", "/etc/openbao-agent/spiffe-helper.conf"]
         volumeMounts:
           - name: spiffe-workload-api
@@ -76,7 +77,7 @@ spec:
     assign:
       value:
         name: openbao-agent
-        image: quay.io/openbao/openbao:2.5.5
+        image: harbor.127.0.0.1.sslip.io/platform/openbao:2.5.5
         command: ["bao", "agent", "-config=/etc/openbao-agent/agent.hcl"]
         ports:
           - name: openbao-proxy

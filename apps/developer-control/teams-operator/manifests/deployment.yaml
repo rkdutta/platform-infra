@@ -148,7 +148,7 @@ spec:
       # HTTP API directly, since it needs to POST arbitrary policy/role
       # bodies, not just proxy KV reads/writes.
       - name: spiffe-helper
-        image: ghcr.io/spiffe/spiffe-helper:0.9.1
+        image: harbor.127.0.0.1.sslip.io/platform/spiffe-helper:0.9.1
         args: ["-config", "/app/openbao-agentconfig-templates/spiffe-helper.conf"]
         volumeMounts:
           - name: spiffe-workload-api

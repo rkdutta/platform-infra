@@ -175,15 +175,26 @@ path "auth/jwt/role/team-*" {
 }
 EOF
 
-kubectl -n openbao exec openbao-0 -- sh -c \
-  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/jwt/role/teams-operator-admin \
-     role_type=jwt \
-     bound_audiences=openbao \
-     user_claim=sub \
-     bound_claims_type=glob \
-     bound_claims=sub=spiffe://platform.local/ns/engineering-platform/sa/teams-operator \
-     token_policies=teams-operator-admin-policy \
-     token_ttl=15m token_max_ttl=1h"
+# `bound_claims` is a map field — the CLI's `key=value` shorthand doesn't
+# parse a nested map correctly (fails with "expected type
+# 'map[string]interface {}', got unconvertible type 'string'"), confirmed
+# live rather than assumed. Use a JSON body over stdin instead, same as the
+# policy write above.
+kubectl -n openbao exec -i openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/jwt/role/teams-operator-admin -" <<'EOF'
+{
+  "role_type": "jwt",
+  "bound_audiences": ["openbao"],
+  "user_claim": "sub",
+  "bound_claims_type": "glob",
+  "bound_claims": {
+    "sub": "spiffe://platform.local/ns/engineering-platform/sa/teams-operator"
+  },
+  "token_policies": ["teams-operator-admin-policy"],
+  "token_ttl": "15m",
+  "token_max_ttl": "1h"
+}
+EOF
 ```
 
 From then on `teams-operator` creates every `team-<namespace>` policy/role

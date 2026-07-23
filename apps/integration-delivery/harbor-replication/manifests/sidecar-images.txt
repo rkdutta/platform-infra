@@ -1,0 +1,16 @@
+# Third-party sidecar images that tenant-guardrails's OpenBao mutations
+# inject into every team-* pod (see apps/security/tenant-guardrails/manifests/
+# openbao-sidecar-*.yaml). tenant-images-from-harbor denies any container
+# whose image isn't from this cluster's Harbor - including Gatekeeper-
+# injected sidecars, since validation runs after mutation - so these public
+# images need mirroring into Harbor's `platform` project the same as every
+# other tenant-visible image, just via a generic docker-registry adapter
+# (these aren't rkdutta/* GHCR repos, so the github-ghcr adapter used by
+# configure-job.yaml/repos.txt doesn't apply - quay.io isn't GHCR at all).
+#
+# One line per image: <registry-url>|<repo-path>|<tag>. Pinned exact tags,
+# not "**" like the app-repo replication - these rarely change and a
+# surprise upstream tag move shouldn't silently alter what every tenant pod
+# runs.
+https://ghcr.io|spiffe/spiffe-helper|0.9.1
+https://quay.io|openbao/openbao|2.5.5
