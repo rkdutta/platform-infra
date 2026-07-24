@@ -53,11 +53,30 @@ spec:
       # live Rollout at admission time when this manifest doesn't set one -
       # without this, Argo would see permanent drift on that one field and
       # selfHeal would fight the mutation every cycle.
+      #
+      # Both demo-go apps opt in to tenant-guardrails's OpenBao mutations
+      # (platform.example.com/openbao-access: "true" on the Rollout's own
+      # labels - see platform-infra/docs/openbao-spiffe-access.md) - those
+      # mutations inject the spiffe-workload-api/openbao-agent-shared/
+      # openbao-agent-config volumes and the spiffe-helper/openbao-agent
+      # containers, none of which exist in either app repo's own manifest.
+      # Same reasoning as priorityClassName, but for whole arrays rather
+      # than one scalar - ignoring the full containers/volumes arrays (not
+      # just the injected entries) is the tradeoff: Argo/selfHeal stop
+      # noticing drift on this app's *own* container/volume changes too,
+      # not just the mutation's. Accepted because there's no
+      # index-independent way to ignore "only entries not in git" with
+      # jsonPointers, and a fragile index-based ignore (e.g.
+      # /spec/template/spec/containers/1) would silently point at the wrong
+      # entry the moment either app adds a second container/volume of its
+      # own.
       ignoreDifferences:
         - group: argoproj.io
           kind: Rollout
           jsonPointers:
             - /spec/template/spec/priorityClassName
+            - /spec/template/spec/volumes
+            - /spec/template/spec/containers
       syncPolicy:
         automated:
           prune: true
