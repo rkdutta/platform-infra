@@ -7,14 +7,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      contents: write
     if: github.actor == 'renovate[bot]'
     steps:
       - uses: hmarr/auto-approve-action@v4
         with:
           review-message: "Auto approved automated PR from Renovate bot"
 
-      # - name: Enable auto-merge
-      #   run: gh pr merge "$PR_URL"
-      #   env:
-      #     PR_URL: ${{ github.event.pull_request.html_url }}
-      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # renovate.json's platformAutomerge should already ask GitHub to
+      # auto-merge these PRs, but that only works once this repo's "Allow
+      # auto-merge" setting is on (Settings -> General -> Pull Requests) -
+      # this step is the belt-and-suspenders in case that's off or Renovate's
+      # own attempt didn't stick. `--auto` enables GitHub's native
+      # auto-merge (waits for required checks/reviews to actually pass) -
+      # NOT an immediate merge attempt, which would fail here since this
+      # step runs in the same job as the approval above and no checks have
+      # had time to complete yet.
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
