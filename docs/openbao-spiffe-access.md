@@ -73,19 +73,19 @@ getting it into a pod, and getting OpenBao to trust it.
  └──────────────┬───────────────┘
                 │ JWT-SVID (audience "openbao")
                 ▼
- ┌─────────────────────────────────────────────┐
- │  tenant pod (e.g. demo-api-go)              │
- │                                             │
- │  ┌──────────────┐   JWT file   ┌──────────┐ │
- │  │ spiffe-helper│ ───────────► │  openbao │ │
- │  │  (sidecar)   │              │  -agent  │ │
- │  └──────────────┘              │ (sidecar)│ │
- │                                └──────┬───┘ │
- │  ┌──────────────┐   localhost:8207    │     │
- │  │  app container│◄───────────────────┘     │
- │  │  (unmodified) │  KV read/write, no token │
- │  └──────────────┘                           │
- └─────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────┐
+ │  tenant pod (e.g. demo-api-go)               │
+ │                                              │
+ │  ┌──────────────┐   JWT file   ┌──────────┐  │
+ │  │ spiffe-helper│ ───────────► │  openbao │  │
+ │  │  (sidecar)   │              │  -agent  │  │
+ │  └──────────────┘              │ (sidecar)│  │
+ │                                └──────┬───┘  │
+ │  ┌───────────────┐   localhost:8207    │     │
+ │  │  app container│◄───────────────────┘      │
+ │  │  (unmodified) │  KV read/write, no token  │
+ │  └───────────────┘                           │
+ └──────────────────────────────────────────────┘
                 │ bao write/read via
                 │ auth/jwt/login -> kv-teams/data/<namespace>/*
                 ▼
