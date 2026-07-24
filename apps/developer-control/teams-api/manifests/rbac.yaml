@@ -46,6 +46,14 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["get", "list"]
+# List the PriorityClasses tenant workloads can be assigned (tenant-critical/
+# -standard/-besteffort - see apps/resource/tenant-priority-classes), so the
+# application card's "Tier" info popover shows which ones actually exist in
+# the cluster rather than a hardcoded, driftable list (priority_classes.py).
+# Cluster-scoped, hence the whole group rather than a namespaced Role.
+- apiGroups: ["scheduling.k8s.io"]
+  resources: ["priorityclasses"]
+  verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
