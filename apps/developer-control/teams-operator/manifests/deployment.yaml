@@ -50,6 +50,16 @@ spec:
           value: "http://teams-api-service.engineering-platform.svc.cluster.local:8000"
         - name: POLL_INTERVAL
           value: "30"
+        # Durable home for Events whose involvedObject namespace is being
+        # deleted (see delete_namespace / _emit_event in teams_operator.py)
+        # - an Event stored in the namespace it's about to delete would be
+        # cascade-deleted along with it. Via the downward API rather than
+        # hardcoded, so this doesn't silently break if this Deployment is
+        # ever moved to a different namespace.
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         # Reuses this same Deployment's own harbor-pull Secret so every team
         # namespace the operator provisions can also pull from Harbor's
         # private `platform` project — see ensure_harbor_pull_secret in
