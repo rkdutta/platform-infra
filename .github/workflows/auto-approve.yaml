@@ -19,10 +19,7 @@ jobs:
       # auto-merge" setting is on (Settings -> General -> Pull Requests) -
       # this step is the belt-and-suspenders in case that's off or Renovate's
       # own attempt didn't stick. `--auto` enables GitHub's native
-      # auto-merge (waits for required checks/reviews to actually pass) -
-      # NOT an immediate merge attempt, which would fail here since this
-      # step runs in the same job as the approval above and no checks have
-      # had time to complete yet.
+      # auto-merge (waits forfffvcv
       - name: Enable auto-merge
         run: gh pr merge --auto --squash "$PR_URL"
         env:
