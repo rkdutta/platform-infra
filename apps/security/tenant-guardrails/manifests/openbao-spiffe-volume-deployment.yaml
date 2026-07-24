@@ -1,5 +1,12 @@
-# Gives every tenant Deployment a path to its own SPIFFE identity, so it can
-# authenticate to OpenBao without any static credential. Three volumes:
+# Gives a tenant Deployment a path to its own SPIFFE identity, so it can
+# authenticate to OpenBao without any static credential - opt-in via the
+# label `platform.example.com/openbao-access: "true"` on the Deployment
+# itself (not the pod template), not blanket-applied to every tenant
+# workload. Every pod in a team-* namespace already gets a SPIFFE identity
+# registered (the spire-default fallback ClusterSPIFFEID has no opt-in), but
+# actually consuming it costs 2 extra containers + 3 extra volumes per pod,
+# so only workloads that want OpenBao access should pay for that. Three
+# volumes when opted in:
 #
 # 1. spiffe-workload-api: the SPIFFE CSI driver's ephemeral volume — mounts
 #    the SPIRE Workload API socket (already issuing every pod in every
@@ -42,6 +49,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see this file's header comment.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.volumes[name: spiffe-workload-api]"
   parameters:
     pathTests:
@@ -72,6 +83,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see this file's header comment.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.volumes[name: openbao-agent-shared]"
   parameters:
     pathTests:
@@ -100,6 +115,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see this file's header comment.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.volumes[name: openbao-agent-config]"
   parameters:
     pathTests:

@@ -1,6 +1,7 @@
 # Same as openbao-spiffe-volume-deployment.yaml, for Argo Rollouts - the kind
 # every current tenant workload (demo-api-go, demo-web-go, demo-api-py,
-# demo-web-py) actually uses.
+# demo-web-py) actually uses. Opt-in via the same label, on the Rollout
+# itself.
 apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
@@ -19,6 +20,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see openbao-spiffe-volume-deployment.yaml's header.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.volumes[name: spiffe-workload-api]"
   parameters:
     pathTests:
@@ -49,6 +54,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see openbao-spiffe-volume-deployment.yaml's header.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.volumes[name: openbao-agent-shared]"
   parameters:
     pathTests:
@@ -77,6 +86,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see openbao-spiffe-volume-deployment.yaml's header.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.volumes[name: openbao-agent-config]"
   parameters:
     pathTests:

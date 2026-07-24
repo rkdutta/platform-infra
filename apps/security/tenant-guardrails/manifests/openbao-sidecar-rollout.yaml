@@ -20,6 +20,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see openbao-spiffe-volume-deployment.yaml's header.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.containers[name: spiffe-helper]"
   parameters:
     pathTests:
@@ -69,6 +73,10 @@ spec:
       matchExpressions:
         - key: teams.example.com/team-id
           operator: Exists
+    # Opt-in, not blanket injection - see openbao-spiffe-volume-deployment.yaml's header.
+    labelSelector:
+      matchLabels:
+        platform.example.com/openbao-access: "true"
   location: "spec.template.spec.containers[name: openbao-agent]"
   parameters:
     pathTests:

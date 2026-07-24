@@ -1,6 +1,6 @@
 # SPIFFE-Authenticated OpenBao Access for Team Namespaces
 
-Every pod in a `team-*` namespace can read/write secrets scoped to its own
+Any pod in a `team-*` namespace can read/write secrets scoped to its own
 namespace in OpenBao, with **no static credential anywhere** — no Kubernetes
 Secret holding an OpenBao token, no API key baked into an image, nothing a
 human provisions per app. Instead, a pod's own cryptographic identity (its
@@ -8,6 +8,13 @@ human provisions per app. Instead, a pod's own cryptographic identity (its
 mechanism end to end: what SPIFFE/SPIRE actually give you, how that identity
 gets turned into OpenBao access, and the exact sequence of events from "a pod
 starts" to "an app calls a local URL and gets its secret back."
+
+This is **opt-in per workload**, not automatic for every tenant pod: add the
+label `platform.example.com/openbao-access: "true"` to a Deployment's or
+Rollout's own `metadata.labels` (not the pod template's) to get it. Without
+the label, a workload gets none of the extra containers/volumes described
+below — see [Why a label, not an annotation](#why-a-label-not-an-annotation)
+for why opt-in works this way.
 
 If you just want the file map, jump to [Where things live](#where-things-live).
 If you want the "why did we choose this" design rationale, see the PR/commit
@@ -117,7 +124,9 @@ Two things make this work that are easy to gloss over:
 ## Step by step: what happens when a tenant pod starts
 
 This is the part that's easy to lose track of, because five different
-components each do one small thing. Concretely, for a pod in `team-jack-dev`:
+components each do one small thing. Concretely, for a pod in `team-jack-dev`
+whose Deployment/Rollout carries `platform.example.com/openbao-access: "true"`
+(without the label, none of steps 1-2 fire — the pod is admitted unchanged):
 
 1. **Admission time.** The pod's Deployment/Rollout is submitted to the API
    server. Two Gatekeeper `Assign` mutations
@@ -260,6 +269,35 @@ trust chain, just with a more privileged role:
 | Policy/role/agent-config templates (the actual text OpenBao/the sidecars receive) | `apps/developer-control/teams-operator/manifests/openbao-{policy,role,agentconfig}-templates/` |
 | teams-operator's own privileged trust | `apps/developer-control/teams-operator/manifests/deployment.yaml` (spiffe-helper sidecar), `bootstrap/README.md` (one-time role bootstrap) |
 | Sidecar image mirroring into Harbor | `apps/integration-delivery/harbor-replication/manifests/sidecar-images{.txt,-job.yaml}` |
+| Opt-in label (add to a workload's own `metadata.labels` to get access) | `platform.example.com/openbao-access: "true"` — example usage: `demo-api-go/deploy/demo-api-go.yaml` |
+
+## Why a label, not an annotation
+
+The natural instinct for an opt-in flag is an annotation. Gatekeeper's
+`Assign` mutation type can't do that, though — its `match` field only
+supports `labelSelector` (matching the target object's own labels),
+`namespaceSelector`, `namespaces`/`excludedNamespaces`, `kinds`, and `name`;
+there's no annotation-based selector (confirmed against the live `Assign`
+CRD schema: `kubectl get crd assign.mutations.gatekeeper.sh -o
+jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.match.properties}'`).
+
+The other candidate was `parameters.pathTests`, which can assert a path
+`MustExist`/`MustNotExist` — but Gatekeeper requires every `pathTests`
+`subPath` to be a *prefix* of the mutation's own `location`. Since
+`location` here is `spec.template.spec.volumes[...]` /
+`spec.template.spec.containers[...]`, a `pathTests` entry can only check
+other volumes/containers, never an unrelated field like
+`metadata.annotations`. Verified empirically (a `pathTests` entry pointing
+at `metadata.annotations.foo` is rejected outright at `kubectl apply` time
+with "all subpaths must be a prefix of the `location` value") before
+settling on `labelSelector`.
+
+So: **a label on the Deployment/Rollout's own `metadata.labels`** is the
+only mechanism `Assign` actually offers for conditional injection. All four
+`openbao-*.yaml` mutation files gate on it independently (not one shared
+check), so there's no ordering dependency between the volume mutations and
+the sidecar mutations — a workload either has the label and gets all of it,
+or doesn't and gets none of it.
 
 ## Gotchas hit while building this (worth knowing, not obvious from the code alone)
 
