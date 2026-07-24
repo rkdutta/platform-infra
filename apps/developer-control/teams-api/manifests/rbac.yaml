@@ -40,6 +40,12 @@ rules:
 - apiGroups: ["networking.k8s.io"]
   resources: ["ingresses"]
   verbs: ["get", "list"]
+# Read (not write) the Events teams-operator emits on each team namespace
+# (see _emit_event in teams_operator.py) - surfaced as a per-team activity
+# feed in the Teams portal (events_reader.py).
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
