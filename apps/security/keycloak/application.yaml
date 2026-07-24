@@ -207,6 +207,40 @@ spec:
                       "serviceAccountsEnabled": true,
                       "redirectUris": [],
                       "webOrigins": []
+                    },
+                    {
+                      "clientId": "argocd",
+                      "name": "Argo CD",
+                      "description": "Argo CD's own native OIDC login (not Dex — see platform-base/argocd.tf). Confidential; clientSecret here must match var.argocd_oidc_client_secret in that separate Terraform-managed deployment — nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
+                      "enabled": true,
+                      "protocol": "openid-connect",
+                      "publicClient": false,
+                      "clientAuthenticatorType": "client-secret",
+                      "secret": "dev-argocd-oidc-secret-change-me",
+                      "standardFlowEnabled": true,
+                      "directAccessGrantsEnabled": false,
+                      "implicitFlowEnabled": false,
+                      "serviceAccountsEnabled": false,
+                      "redirectUris": [
+                        "http://argocd.127.0.0.1.sslip.io:8080/auth/callback"
+                      ],
+                      "webOrigins": [
+                        "http://argocd.127.0.0.1.sslip.io:8080"
+                      ],
+                      "protocolMappers": [
+                        {
+                          "name": "groups",
+                          "protocol": "openid-connect",
+                          "protocolMapper": "oidc-group-membership-mapper",
+                          "config": {
+                            "claim.name": "groups",
+                            "full.path": "false",
+                            "access.token.claim": "true",
+                            "id.token.claim": "true",
+                            "userinfo.token.claim": "true"
+                          }
+                        }
+                      ]
                     }
                   ],
                   "users": [
@@ -275,7 +309,8 @@ spec:
                           "temporary": false
                         }
                       ],
-                      "realmRoles": ["admin", "team-leader"]
+                      "realmRoles": ["admin", "team-leader"],
+                      "groups": ["/argocd-admins"]
                     },
                     {
                       "username": "service-account-teams-api-sa",
@@ -304,9 +339,129 @@ spec:
                   },
                   "groups": [
                     { "name": "team-sss" },
-                    { "name": "team-mmm" }
+                    { "name": "team-mmm" },
+                    { "name": "argocd-admins" }
                   ]
                 }
+          # --- In-cluster reachability for Argo CD's OIDC login (platform-base/argocd.tf) ---
+          # platform-auth.127.0.0.1.sslip.io resolves to 127.0.0.1 everywhere
+          # (that's the whole point of sslip.io) — from a browser that's the
+          # host machine, but from *inside* a pod like argocd-server it's the
+          # pod's own loopback. And Keycloak's issuer has :8443 hardcoded (see
+          # this Application's --hostname flag above), which the ingress-nginx
+          # Service doesn't listen on internally at all — only 80/443; :8443 is
+          # a kind Docker port mapping that only exists on the host. Two pieces
+          # fix this, same pattern as apps/security/ratify's harbor-trust.yaml
+          # (which solves the identical problem for harbor.127.0.0.1.sslip.io):
+          # a small additional Service exposing :8443 against the *same* pods
+          # ingress-nginx-controller's own Service already selects, and a
+          # CoreDNS rewrite pointing the hostname at it.
+          - apiVersion: v1
+            kind: Service
+            metadata:
+              name: platform-auth-ingress-8443
+              namespace: ingress-nginx
+              labels:
+                app.kubernetes.io/managed-by: keycloak-application
+            spec:
+              selector:
+                app.kubernetes.io/component: controller
+                app.kubernetes.io/instance: ingress-nginx
+                app.kubernetes.io/name: ingress-nginx
+              ports:
+                - name: https-8443
+                  port: 8443
+                  targetPort: https
+                  protocol: TCP
+          - apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: keycloak-dns-trust
+              namespace: keycloak
+          - apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRole
+            metadata:
+              name: keycloak-dns-trust
+            rules:
+              - apiGroups: [""]
+                resources: ["configmaps"]
+                verbs: ["get", "update", "patch"]
+              - apiGroups: ["apps"]
+                resources: ["deployments"]
+                verbs: ["get", "patch"]
+          - apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: keycloak-dns-trust
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: keycloak-dns-trust
+            subjects:
+              - kind: ServiceAccount
+                name: keycloak-dns-trust
+                namespace: keycloak
+          - apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: keycloak-dns-trust
+              namespace: keycloak
+              annotations:
+                argocd.argoproj.io/hook: PostSync
+                argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+              labels:
+                app: keycloak-dns-trust
+            spec:
+              backoffLimit: 4
+              template:
+                metadata:
+                  labels:
+                    app: keycloak-dns-trust
+                spec:
+                  serviceAccountName: keycloak-dns-trust
+                  restartPolicy: Never
+                  securityContext:
+                    runAsNonRoot: true
+                    runAsUser: 65532
+                    runAsGroup: 65532
+                    seccompProfile:
+                      type: RuntimeDefault
+                  volumes:
+                    - name: tmp
+                      emptyDir: {}
+                  containers:
+                    - name: configure
+                      image: alpine/k8s:1.31.0
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        capabilities:
+                          drop: ["ALL"]
+                      env:
+                        - name: HOME
+                          value: /tmp
+                      volumeMounts:
+                        - name: tmp
+                          mountPath: /tmp
+                      command: ["/bin/bash", "-eu", "-c"]
+                      args:
+                        - |
+                          echo "CoreDNS rewrite platform-auth.127.0.0.1.sslip.io -> platform-auth-ingress-8443 (idempotent)"
+                          cf=$(kubectl -n kube-system get cm coredns -o go-template='{{.data.Corefile}}')
+                          target="platform-auth-ingress-8443.ingress-nginx.svc.cluster.local"
+                          if printf '%s' "$cf" | grep -q "rewrite name platform-auth.127.0.0.1.sslip.io $target"; then
+                            echo "   already present and correct"
+                          else
+                            # Drop any stale rewrite line for this hostname first (e.g. an
+                            # earlier version pointing at the wrong target), then add the
+                            # correct one - keeps this idempotent across re-runs AND across
+                            # fixes to this script itself.
+                            stripped=$(printf '%s\n' "$cf" | grep -v 'rewrite name platform-auth.127.0.0.1.sslip.io')
+                            newcf=$(printf '%s\n' "$stripped" | awk -v t="$target" '{print} /^[[:space:]]*ready[[:space:]]*$/ && !d {print "    rewrite name platform-auth.127.0.0.1.sslip.io " t; d=1}')
+                            kubectl -n kube-system create cm coredns --from-literal=Corefile="$newcf" --dry-run=client -o yaml | kubectl apply -f -
+                            kubectl -n kube-system rollout restart deploy coredns
+                            echo "   rewrite added"
+                          fi
         extraVolumes: |
           - name: realm-import
             configMap:
