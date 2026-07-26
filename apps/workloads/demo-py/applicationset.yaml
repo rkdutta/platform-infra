@@ -39,14 +39,14 @@ spec:
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
-      project: tenant-workloads
+      project: demo-py
       source:
         repoURL: '{{.repoURL}}'
         targetRevision: main
         path: deploy
       destination:
         server: https://kubernetes.default.svc
-        namespace: team-jack-default
+        namespace: project-demo-py-default
       # Gatekeeper's default-priority-class mutation (see
       # apps/security/tenant-guardrails) injects priorityClassName into the
       # live Rollout at admission time when this manifest doesn't set one -
