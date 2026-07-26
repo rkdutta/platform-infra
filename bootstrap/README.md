@@ -159,18 +159,23 @@ today — same class of manual-refresh caveat as `platform-tls` below).
 
 ```sh
 # 3) Bootstrap the operator's own trust — chicken-and-egg: teams-operator
-#    creates every team-<namespace> policy/role itself once it's running
+#    creates every project-<namespace> policy/role itself once it's running
 #    (ensure_openbao_access), but it needs its *own* role to exist first.
 #    bound_claims.sub matches this Deployment's own SPIFFE ID (see
 #    apps/developer-control/teams-operator/manifests/deployment.yaml's
 #    spiffe-helper sidecar — same trust chain as tenant workloads, just
 #    scoped to a management policy instead of one namespace's KV path).
+#    Paths are "project-*" (not "team-*") to match teams-api's
+#    default_namespace()/ordered_namespace() output - if that prefix ever
+#    changes again, this policy must change with it or every namespace's
+#    OpenBao policy/role write starts 403ing (confirmed live: this exact
+#    drift happened once already when the prefix moved team- -> project-).
 kubectl -n openbao exec -i openbao-0 -- sh -c \
   "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao policy write teams-operator-admin-policy -" <<'EOF'
-path "sys/policies/acl/team-*" {
+path "sys/policies/acl/project-*" {
   capabilities = ["create", "read", "update", "delete"]
 }
-path "auth/jwt/role/team-*" {
+path "auth/jwt/role/project-*" {
   capabilities = ["create", "read", "update", "delete"]
 }
 EOF
@@ -197,7 +202,7 @@ kubectl -n openbao exec -i openbao-0 -- sh -c \
 EOF
 ```
 
-From then on `teams-operator` creates every `team-<namespace>` policy/role
+From then on `teams-operator` creates every `project-<namespace>` policy/role
 as namespaces are provisioned — no further manual OpenBao steps for new
 teams. A full cluster/PVC recreate wipes this configuration along with
 everything else in OpenBao's storage (same as the KV init above) — redo
