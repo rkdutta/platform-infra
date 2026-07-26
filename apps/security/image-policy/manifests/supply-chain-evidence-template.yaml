@@ -3,6 +3,18 @@
 # ratify app), which checks the cosign signature + SBOM/vuln/quality attestations
 # attached to each image. Self-contained (own kind) so it doesn't depend on the
 # ratify app's own ConstraintTemplate being present.
+#
+# Excludes containers injected by platform mutation webhooks (see
+# apps/security/tenant-guardrails's openbao-sidecar-*.yaml: "spiffe-helper" +
+# "openbao-agent", both vendor images the tenant never chose and can't change)
+# - matched by container name, which is stable and platform-controlled, unlike
+# image tags. Without this, every project that opts into OpenBao access gets
+# flagged non-compliant purely because of platform-owned sidecar images, and
+# that verdict rolls straight into the project's compliance badge
+# (compliance.py: any violation in the namespace -> non_compliant project-wide)
+# even though the tenant has no way to act on it. Whether these two images
+# themselves get real supply-chain evidence is a separate, platform-side
+# concern - orthogonal to what a tenant's compliance signal should reflect.
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -19,10 +31,15 @@ spec:
       rego: |
         package k8ssupplychainevidence
 
+        injected_sidecar_names := {"spiffe-helper", "openbao-agent"}
+
         remote_data := response {
-          images := [img | img = input.review.object.spec.containers[_].image]
-          images_init := [img | img = input.review.object.spec.initContainers[_].image]
-          images_ephemeral := [img | img = input.review.object.spec.ephemeralContainers[_].image]
+          containers := [c | c = input.review.object.spec.containers[_]; not injected_sidecar_names[c.name]]
+          init_containers := [c | c = input.review.object.spec.initContainers[_]; not injected_sidecar_names[c.name]]
+          ephemeral_containers := [c | c = input.review.object.spec.ephemeralContainers[_]; not injected_sidecar_names[c.name]]
+          images := [c.image | c = containers[_]]
+          images_init := [c.image | c = init_containers[_]]
+          images_ephemeral := [c.image | c = ephemeral_containers[_]]
           other_images := array.concat(images_init, images_ephemeral)
           all_images := array.concat(other_images, images)
           response := external_data({"provider": "ratify-provider", "keys": all_images})
