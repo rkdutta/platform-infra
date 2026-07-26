@@ -243,6 +243,9 @@ spec:
                       "webOrigins": [
                         "http://argocd.127.0.0.1.sslip.io:8080"
                       ],
+                      "attributes": {
+                        "post.logout.redirect.uris": "http://argocd.127.0.0.1.sslip.io:8080##http://argocd.127.0.0.1.sslip.io:8080/*"
+                      },
                       "protocolMappers": [
                         {
                           "name": "groups",
