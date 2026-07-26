@@ -60,6 +60,24 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        # Authenticated identity for calling teams-api's /internal/*
+        # control-plane endpoints (client-credentials grant against the
+        # confidential teams-operator-sa Keycloak client) — see
+        # _teams_api_token in teams_operator.py and auth.require_operator in
+        # teams-api. Mirrors teams-api's own KC_ADMIN_CLIENT_SECRET pattern
+        # (keycloak-admin-secret.yaml there / keycloak-operator-secret.yaml
+        # here).
+        - name: OPERATOR_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: teams-operator-keycloak-secret
+              key: client-secret
+        # Argo CD Project self-service reconciliation (see
+        # ensure_argocd_appproject / ensure_argocd_rbac_policy in
+        # teams_operator.py). Must match var.argocd_namespace's default in
+        # platform-base/argocd.tf.
+        - name: ARGOCD_NAMESPACE
+          value: "argocd"
         # Reuses this same Deployment's own harbor-pull Secret so every team
         # namespace the operator provisions can also pull from Harbor's
         # private `platform` project — see ensure_harbor_pull_secret in

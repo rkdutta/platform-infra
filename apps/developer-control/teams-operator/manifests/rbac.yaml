@@ -79,6 +79,26 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["create"]
+# Argo CD's RBAC ConfigMap, for self-service Project policy blocks (see
+# ensure_argocd_rbac_policy / _remove_rbac_policy_block in
+# teams_operator.py). Terraform seeds only the static baseline
+# (platform-base/argocd.tf's kubernetes_config_map.argocd_rbac,
+# configs.rbac.create=false) - this operator owns everything else written
+# into it, read-modify-write per project. Pinned by resourceNames to the
+# one ConfigMap touched this way; no `create` needed since Terraform always
+# creates it first.
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "update", "patch"]
+  resourceNames: ["argocd-rbac-cm"]
+# Argo CD Projects for self-service Project management (see
+# ensure_argocd_appproject / delete_argocd_appproject) - full CRUD, unlike
+# the create-if-missing-only resources above, since sourceRepos/destinations
+# legitimately change after creation (a project gaining a namespace or a
+# source repo).
+- apiGroups: ["argoproj.io"]
+  resources: ["appprojects"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
