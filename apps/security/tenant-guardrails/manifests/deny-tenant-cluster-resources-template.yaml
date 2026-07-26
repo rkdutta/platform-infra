@@ -7,9 +7,13 @@
 # this constraint catches it a second way and gives an explicit audit trail.
 #
 # Identifies "a tenant identity" by ServiceAccount name convention
-# (system:serviceaccount:team-*:*), matching how teams-operator names the
-# namespaces it creates - not by anything an admin's own (human) OIDC
-# identity would ever match.
+# (system:serviceaccount:project-*:*), matching how teams-operator names the
+# namespaces it creates (teams-api's default_namespace/ordered_namespace) -
+# not by anything an admin's own (human) OIDC identity would ever match.
+# Matches the legacy "team-*" prefix too: namespaces created before that
+# naming change (e.g. the demo-go/demo-py apps' team-jack-* namespaces)
+# aren't retroactively renamed, so both prefixes need to keep being denied
+# until every such namespace is migrated or deleted.
 #
 # deny: this is a pure admission-time behavioral check with no existing-
 # state dependency - no tenant identity creates cluster-scoped resources
@@ -29,6 +33,12 @@ spec:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8sdenytenantclusterresources
+
+        violation[{"msg": msg}] {
+          user := input.review.userInfo.username
+          startswith(user, "system:serviceaccount:project-")
+          msg := sprintf("tenant identity %v must not create cluster-scoped %v resources", [user, input.review.kind.kind])
+        }
 
         violation[{"msg": msg}] {
           user := input.review.userInfo.username

@@ -2,7 +2,7 @@
 # authenticate to OpenBao without any static credential - opt-in via the
 # label `platform.example.com/openbao-access: "true"` on the Deployment
 # itself (not the pod template), not blanket-applied to every tenant
-# workload. Every pod in a team-* namespace already gets a SPIFFE identity
+# workload. Every pod in a tenant namespace already gets a SPIFFE identity
 # registered (the spire-default fallback ClusterSPIFFEID has no opt-in), but
 # actually consuming it costs 2 extra containers + 3 extra volumes per pod,
 # so only workloads that want OpenBao access should pay for that. Three
@@ -10,7 +10,7 @@
 #
 # 1. spiffe-workload-api: the SPIFFE CSI driver's ephemeral volume — mounts
 #    the SPIRE Workload API socket (already issuing every pod in every
-#    team-* namespace an SVID today via the spire-default fallback
+#    tenant namespace an SVID today via the spire-default fallback
 #    ClusterSPIFFEID, see apps/security/spire/ — nothing currently reads it).
 #    Only the spiffe-helper sidecar (see openbao-sidecar-deployment.yaml)
 #    mounts this; it never needs to reach the app container.

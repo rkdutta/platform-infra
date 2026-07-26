@@ -15,7 +15,7 @@ auto_auth {
   method "jwt" {
     mount_path = "auth/jwt"
     config = {
-      role = "team-{{ NAMESPACE }}"
+      role = "{{ NAMESPACE }}"
       path = "/shared/spiffe-jwt"
       remove_jwt_after_reading = false
     }

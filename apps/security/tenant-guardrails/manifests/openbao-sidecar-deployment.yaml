@@ -10,8 +10,8 @@
 #    "openbao", daemon-mode default true so it keeps rotating - JWT-SVIDs are
 #    short-lived), writes it to /shared/spiffe-jwt.
 # 2. openbao-agent: `bao agent` in auto_auth mode, reading that JWT file,
-#    logging into OpenBao's jwt auth method (role = this namespace's
-#    team-<namespace> role - see teams-operator's openbao-agentconfig-
+#    logging into OpenBao's jwt auth method (role = this namespace's own
+#    <namespace> role - see teams-operator's openbao-agentconfig-
 #    templates), and running an api_proxy on 127.0.0.1:8207. The app
 #    container talks to OpenBao by calling that local proxy - the sidecar
 #    attaches the auth token transparently, so the app never handles a
