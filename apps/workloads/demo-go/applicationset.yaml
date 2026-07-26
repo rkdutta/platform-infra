@@ -47,7 +47,7 @@ spec:
         path: deploy
       destination:
         server: https://kubernetes.default.svc
-        namespace: team-jack-dev
+        namespace: project-demo-go-default
       # Gatekeeper's default-priority-class mutation (see
       # apps/security/tenant-guardrails) injects priorityClassName into the
       # live Rollout at admission time when this manifest doesn't set one -
