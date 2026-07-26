@@ -40,7 +40,7 @@ spec:
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
-      project: tenant-workloads
+      project: demo-go
       source:
         repoURL: '{{.repoURL}}'
         targetRevision: main
