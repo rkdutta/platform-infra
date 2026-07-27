@@ -279,11 +279,11 @@ rm /tmp/platform-tls.crt
 
 # 3) A role covering both the UI and `bao login -method=oidc` CLI flows -
 #    redirect URIs must exactly match the "openbao" Keycloak client's
-#    redirectUris. `policies=default` is a deliberately modest baseline
-#    (Vault/OpenBao's built-in read-your-own-token policy) — map specific
-#    Keycloak groups to richer policies later via `identity/group` +
-#    `group_aliases` bound to this mount if project-scoped human access
-#    via SSO is ever needed; out of scope for just wiring up login.
+#    redirectUris. `policies=default` is the modest baseline every OIDC
+#    login gets (Vault/OpenBao's built-in read-your-own-token policy);
+#    step 4 below layers admin access on top for a specific group, via
+#    identity groups rather than editing this role's policies (which would
+#    hand that access to *everyone* who logs in via oidc, not just admins).
 kubectl -n openbao exec -i openbao-0 -- sh -c \
   "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/oidc/role/default -" <<'EOF'
 {
@@ -299,14 +299,47 @@ kubectl -n openbao exec -i openbao-0 -- sh -c \
   "ttl": "1h"
 }
 EOF
+
+# 4) Give the "argocd-admins" Keycloak group (Argo CD and Harbor already
+#    treat this as "the platform admins") root-equivalent access on login -
+#    OpenBao/Vault will never mint a token carrying the literal built-in
+#    "root" policy through any auth method (only `bao operator init` /
+#    `generate-root` can produce a real root token; this is a hard security
+#    restriction, not a config gap), so `path "*"` + sudo is the standard
+#    stand-in. Bound via an *external identity group* rather than adding to
+#    the role's `policies` above, since a role's policies apply to every
+#    login through it regardless of the user's actual groups - this is what
+#    makes it apply only to argocd-admins members.
+kubectl -n openbao exec -i openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao policy write openbao-admin-policy -" <<'EOF'
+path "*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+EOF
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write identity/group/name/openbao-admins type=external policies=openbao-admin-policy"
+
+# Group-alias creation 400s if one's already bound to this mount+name, so
+# this is the one step that isn't a plain overwrite - check first.
+GROUP_ID=$(kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao read -format=json identity/group/name/openbao-admins" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["id"])')
+OIDC_ACCESSOR=$(kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao auth list -format=json" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["oidc/"]["accessor"])')
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write identity/group-alias name=argocd-admins mount_accessor=$OIDC_ACCESSOR canonical_id=$GROUP_ID"
 ```
 
 Log in via the UI's "OIDC" button at `https://openbao.127.0.0.1.sslip.io:8443/ui/`,
 or from the CLI with `bao login -method=oidc` (opens a browser; needs
 `http://localhost:8250/oidc/callback` reachable, which is why that URI is
-in the role above alongside the UI one). A full cluster/PVC recreate wipes
-this along with everything else in OpenBao's storage — redo steps 1–3
-after that.
+in the role above alongside the UI one). Anyone in Keycloak's
+`argocd-admins` group (just `admin` today) gets `openbao-admin-policy`
+merged in automatically via the identity group, on top of the `default`
+baseline everyone else gets. A full cluster/PVC recreate wipes all of this
+along with everything else in OpenBao's storage — redo steps 1–4 after
+that (or just re-run `bootstrap/enable-oidc-sso.sh openbao`).
 
 ## Harbor — enable OIDC login via Keycloak
 

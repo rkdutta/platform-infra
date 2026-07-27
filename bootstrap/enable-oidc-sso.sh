@@ -98,6 +98,52 @@ enable_openbao_oidc() {
 EOF
 
   log "OpenBao OIDC login ready — https://openbao.127.0.0.1.sslip.io:8443/ui/ (OIDC button) or 'bao login -method=oidc'"
+
+  # Vault/OpenBao won't mint a token carrying the literal built-in "root"
+  # policy through any auth method (by design — only `bao operator init` /
+  # `generate-root` can produce a real root token). This is the standard
+  # equivalent: a policy granting every capability on every path, bound via
+  # an external identity group to the same "argocd-admins" Keycloak group
+  # Argo CD and Harbor already treat as "the platform admins" — so anyone
+  # in that group (just "admin" today) gets it automatically on OIDC login,
+  # no separate OpenBao-specific admin list to maintain.
+  log "OpenBao: writing openbao-admin-policy (superuser-equivalent)"
+  kubectl -n openbao exec -i openbao-0 -- sh -c \
+    "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$bao_token bao policy write openbao-admin-policy -" <<'EOF'
+path "*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+EOF
+
+  log "OpenBao: creating/updating the openbao-admins external identity group"
+  kubectl -n openbao exec openbao-0 -- sh -c \
+    "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$bao_token bao write identity/group/name/openbao-admins type=external policies=openbao-admin-policy" \
+    >/dev/null
+
+  local group_json
+  group_json=$(kubectl -n openbao exec openbao-0 -- sh -c \
+    "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$bao_token bao read -format=json identity/group/name/openbao-admins")
+  local group_id has_alias
+  group_id=$(printf '%s' "$group_json" | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["id"])')
+  has_alias=$(printf '%s' "$group_json" | python3 -c '
+import sys, json
+alias = json.load(sys.stdin)["data"].get("alias")
+print("yes" if alias and alias.get("name") == "argocd-admins" else "no")
+')
+
+  if [[ "$has_alias" == "yes" ]]; then
+    log "OpenBao: argocd-admins group-alias already bound, skipping"
+  else
+    log "OpenBao: binding the argocd-admins group-alias to the oidc mount"
+    local oidc_accessor
+    oidc_accessor=$(kubectl -n openbao exec openbao-0 -- sh -c \
+      "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$bao_token bao auth list -format=json" \
+      | python3 -c 'import sys, json; print(json.load(sys.stdin)["oidc/"]["accessor"])')
+    kubectl -n openbao exec openbao-0 -- sh -c \
+      "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$bao_token bao write identity/group-alias name=argocd-admins mount_accessor=$oidc_accessor canonical_id=$group_id"
+  fi
+
+  log "OpenBao: argocd-admins members now get openbao-admin-policy on OIDC login"
 }
 
 # ---------------------------------------------------------------------------
