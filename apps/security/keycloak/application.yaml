@@ -550,7 +550,7 @@ spec:
                       args:
                         - |
                           echo "CoreDNS rewrite platform-auth.127.0.0.1.sslip.io -> platform-auth-ingress-8443 (idempotent)"
-                          cf=$(kubectl -n kube-system get cm coredns -o go-template='{{.data.Corefile}}')
+                          cf=$(kubectl -n kube-system get cm coredns -o jsonpath='{.data.Corefile}')
                           target="platform-auth-ingress-8443.ingress-nginx.svc.cluster.local"
                           if printf '%s' "$cf" | grep -q "rewrite name platform-auth.127.0.0.1.sslip.io $target"; then
                             echo "   already present and correct"
