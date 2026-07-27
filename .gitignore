@@ -6,4 +6,4 @@ bootstrap/repo-credentials.yaml
 bootstrap/repo-credentials*.yaml
 # Real GHCR pull credentials (PAT) — never commit; only the *.example.yaml is tracked
 apps/integration-delivery/harbor-replication/ghcr-credentials.yaml
-.bak
+*.bak
