@@ -67,7 +67,7 @@ spec:
         # 0.3.5: HTTPS SSO working end-to-end. Baked KEYCLOAK_URL=https://
         # platform-auth...:8443/auth; app.module sets useNonce:false (keycloak-js
         # 22 vs Keycloak 26 nonce mismatch). nginx.k8s.conf proxies /api/* -> teams-api.
-        image: harbor.127.0.0.1.sslip.io/platform/teams-app:2.0.36
+        image: harbor.127.0.0.1.sslip.io/platform/teams-app:2.0.38
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
