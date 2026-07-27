@@ -239,6 +239,125 @@ A full cluster rebuild wipes all of these (Secrets aren't in git) — re-run
 the above. You can reuse the same cert/key across rebuilds if you saved a
 copy outside the repo; regenerating is equally fine since it's self-signed.
 
+## OpenBao — enable OIDC login via Keycloak
+
+One-time setup so a human can log into the OpenBao UI/CLI with their
+Keycloak identity instead of a static token, using OpenBao's native `oidc`
+auth method against the "openbao" client in `apps/security/keycloak`'s
+realm import. Commands run with the root token from
+`bootstrap/init-keys.json` (`BAO_TOKEN=$(jq -r '.root_token'
+bootstrap/init-keys.json)`), same as the JWT/SPIRE setup above — this is a
+separate auth method (`oidc`, mounted alongside the existing `jwt` mount
+used for workload identity, not a replacement for it).
+
+```sh
+BAO_TOKEN=$(jq -r '.root_token' bootstrap/init-keys.json)
+
+# 1) Enable the oidc auth method.
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao auth enable oidc"
+
+# 2) Point it at Keycloak's "teams" realm. oidc_discovery_ca_pem is needed
+#    because Keycloak's issuer is only reachable over the self-signed
+#    platform-tls cert (see the section above) — same platform-tls Secret
+#    already present in the openbao namespace for its own ingress.
+kubectl get secret platform-tls -n openbao -o jsonpath='{.data.tls\.crt}' \
+  | base64 -d > /tmp/platform-tls.crt
+kubectl -n openbao cp /tmp/platform-tls.crt openbao-0:/tmp/platform-tls.crt
+kubectl -n openbao exec openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/oidc/config \
+     oidc_discovery_url=https://platform-auth.127.0.0.1.sslip.io:8443/auth/realms/teams \
+     oidc_client_id=openbao \
+     oidc_client_secret=dev-openbao-oidc-secret-change-me \
+     default_role=default \
+     oidc_discovery_ca_pem=@/tmp/platform-tls.crt"
+rm /tmp/platform-tls.crt
+
+# 3) A role covering both the UI and `bao login -method=oidc` CLI flows -
+#    redirect URIs must exactly match the "openbao" Keycloak client's
+#    redirectUris. `policies=default` is a deliberately modest baseline
+#    (Vault/OpenBao's built-in read-your-own-token policy) — map specific
+#    Keycloak groups to richer policies later via `identity/group` +
+#    `group_aliases` bound to this mount if project-scoped human access
+#    via SSO is ever needed; out of scope for just wiring up login.
+kubectl -n openbao exec -i openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/oidc/role/default -" <<'EOF'
+{
+  "role_type": "oidc",
+  "bound_audiences": ["openbao"],
+  "allowed_redirect_uris": [
+    "https://openbao.127.0.0.1.sslip.io:8443/ui/vault/auth/oidc/oidc/callback",
+    "http://localhost:8250/oidc/callback"
+  ],
+  "user_claim": "preferred_username",
+  "groups_claim": "groups",
+  "policies": ["default"],
+  "ttl": "1h"
+}
+EOF
+```
+
+Log in via the UI's "OIDC" button at `https://openbao.127.0.0.1.sslip.io:8443/ui/`,
+or from the CLI with `bao login -method=oidc` (opens a browser; needs
+`http://localhost:8250/oidc/callback` reachable, which is why that URI is
+in the role above alongside the UI one). A full cluster/PVC recreate wipes
+this along with everything else in OpenBao's storage — redo steps 1–3
+after that.
+
+## Harbor — enable OIDC login via Keycloak
+
+One-time setup so a human can log into Harbor with their Keycloak identity
+instead of a local Harbor account, using Harbor's built-in OIDC auth mode
+against the "harbor" client in `apps/security/keycloak`'s realm import.
+Requires `platform-tls` to already exist in the `harbor` namespace (see
+above) and the `caBundleSecretName` wired into
+`apps/integration-delivery/harbor/application.yaml` to have synced (Harbor
+core needs to trust that same self-signed cert to reach Keycloak's OIDC
+discovery endpoint).
+
+```sh
+# 1) Harbor's chart wants the CA under key `ca.crt`, not `tls.crt` — derive
+#    it from the same platform-tls cert rather than generating a second one.
+kubectl get secret platform-tls -n harbor -o jsonpath='{.data.tls\.crt}' \
+  | base64 -d > /tmp/platform-tls.crt
+kubectl -n harbor create secret generic harbor-ca-bundle \
+  --from-file=ca.crt=/tmp/platform-tls.crt
+rm /tmp/platform-tls.crt
+# Wait for Argo CD to sync the caBundleSecretName change and restart core/
+# jobservice/registry/trivy before step 2, or the OIDC discovery call below
+# still hits the untrusted-CA error.
+
+# 2) Configure OIDC auth mode via Harbor's own API (no UI equivalent that's
+#    scriptable) — admin/Harbor12345 is the same DEMO credential used
+#    elsewhere in this file. oidc_admin_group grants Harbor's system-admin
+#    role to anyone in Keycloak's "argocd-admins" group (reusing that group
+#    rather than inventing a Harbor-specific one — same demo user, "admin",
+#    is already a member). Once auth_mode is oidc_auth, only the built-in
+#    local "admin" account can still fall back to its Harbor password —
+#    every other account must use "LOGIN VIA OIDC PROVIDER".
+curl -sk -u admin:Harbor12345 -X PUT \
+  https://harbor.127.0.0.1.sslip.io:8443/api/v2.0/configurations \
+  -H "Content-Type: application/json" \
+  -d '{
+        "auth_mode": "oidc_auth",
+        "oidc_name": "Keycloak",
+        "oidc_endpoint": "https://platform-auth.127.0.0.1.sslip.io:8443/auth/realms/teams",
+        "oidc_client_id": "harbor",
+        "oidc_client_secret": "dev-harbor-oidc-secret-change-me",
+        "oidc_scope": "openid,profile,email",
+        "oidc_verify_cert": true,
+        "oidc_auto_onboard": true,
+        "oidc_user_claim": "preferred_username",
+        "oidc_admin_group": "argocd-admins",
+        "oidc_groups_claim": "groups"
+      }'
+```
+
+Log in via the "LOGIN VIA OIDC PROVIDER" button on Harbor's login page. A
+full cluster/PVC recreate wipes both the `harbor-ca-bundle` Secret and
+Harbor's own database (where this auth config lives) — redo both steps
+after that.
+
 ## Pulling images from Harbor on the kind nodes
 
 Deployments like `teams-api`/`teams-app`/`teams-operator` reference images at

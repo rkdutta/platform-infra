@@ -45,6 +45,16 @@ spec:
         # ingress is mapped to) so the Docker token/redirect flow is correct.
         externalURL: https://harbor.127.0.0.1.sslip.io:8443
 
+        # Trust platform-tls (self-signed) so core's OIDC discovery call to
+        # Keycloak (https://platform-auth.127.0.0.1.sslip.io:8443/auth/realms/teams
+        # — see the "harbor" Keycloak client + bootstrap/README.md's OIDC
+        # section) doesn't fail with "certificate signed by unknown
+        # authority". Injected into core/jobservice/registry/trivy's trust
+        # store; secret must exist in this namespace under key `ca.crt`
+        # (bootstrap/README.md creates it from the same platform-tls cert
+        # already required here for the ingress).
+        caBundleSecretName: harbor-ca-bundle
+
         # Default admin creds for the local demo — CHANGE THIS. Login: admin.
         harborAdminPassword: "Harbor12345"
 

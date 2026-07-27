@@ -260,6 +260,81 @@ spec:
                           }
                         }
                       ]
+                    },
+                    {
+                      "clientId": "openbao",
+                      "name": "OpenBao",
+                      "description": "OpenBao's native OIDC auth method (auth/oidc) - lets platform users log into the OpenBao UI/CLI with their Keycloak identity instead of a static token. Confidential; clientSecret here must match the oidc_client_secret set on OpenBao's auth/oidc/config (see bootstrap/README.md) - nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
+                      "enabled": true,
+                      "protocol": "openid-connect",
+                      "publicClient": false,
+                      "clientAuthenticatorType": "client-secret",
+                      "secret": "dev-openbao-oidc-secret-change-me",
+                      "standardFlowEnabled": true,
+                      "directAccessGrantsEnabled": false,
+                      "implicitFlowEnabled": false,
+                      "serviceAccountsEnabled": false,
+                      "redirectUris": [
+                        "https://openbao.127.0.0.1.sslip.io:8443/ui/vault/auth/oidc/oidc/callback",
+                        "http://localhost:8250/oidc/callback"
+                      ],
+                      "webOrigins": [
+                        "https://openbao.127.0.0.1.sslip.io:8443"
+                      ],
+                      "attributes": {
+                        "post.logout.redirect.uris": "https://openbao.127.0.0.1.sslip.io:8443/ui/*"
+                      },
+                      "protocolMappers": [
+                        {
+                          "name": "groups",
+                          "protocol": "openid-connect",
+                          "protocolMapper": "oidc-group-membership-mapper",
+                          "config": {
+                            "claim.name": "groups",
+                            "full.path": "false",
+                            "access.token.claim": "true",
+                            "id.token.claim": "true",
+                            "userinfo.token.claim": "true"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "clientId": "harbor",
+                      "name": "Harbor",
+                      "description": "Harbor's own OIDC login provider (Administration > Configuration > Authentication, auth_mode=oidc_auth) - lets platform users log into Harbor with their Keycloak identity. Confidential; clientSecret here must match Harbor's oidc_client_secret (see bootstrap/README.md) - nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
+                      "enabled": true,
+                      "protocol": "openid-connect",
+                      "publicClient": false,
+                      "clientAuthenticatorType": "client-secret",
+                      "secret": "dev-harbor-oidc-secret-change-me",
+                      "standardFlowEnabled": true,
+                      "directAccessGrantsEnabled": false,
+                      "implicitFlowEnabled": false,
+                      "serviceAccountsEnabled": false,
+                      "redirectUris": [
+                        "https://harbor.127.0.0.1.sslip.io:8443/c/oidc/callback"
+                      ],
+                      "webOrigins": [
+                        "https://harbor.127.0.0.1.sslip.io:8443"
+                      ],
+                      "attributes": {
+                        "post.logout.redirect.uris": "https://harbor.127.0.0.1.sslip.io:8443/*"
+                      },
+                      "protocolMappers": [
+                        {
+                          "name": "groups",
+                          "protocol": "openid-connect",
+                          "protocolMapper": "oidc-group-membership-mapper",
+                          "config": {
+                            "claim.name": "groups",
+                            "full.path": "false",
+                            "access.token.claim": "true",
+                            "id.token.claim": "true",
+                            "userinfo.token.claim": "true"
+                          }
+                        }
+                      ]
                     }
                   ],
                   "users": [
