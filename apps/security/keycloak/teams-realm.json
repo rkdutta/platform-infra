@@ -105,7 +105,7 @@
     {
       "clientId": "teams-operator-sa",
       "name": "Teams Operator service account",
-      "description": "Confidential client used by teams-operator to call teams-api's authenticated internal endpoints (client-credentials grant) - replaces the previously fully-open /internal/* endpoints. Mirrors teams-api-sa's shape; unlike teams-api-sa this client does NOT get realm-management roles, since teams-operator never calls the Keycloak Admin API directly - it always goes through teams-api. DEMO secret - rotate for real use.",
+      "description": "Confidential client for teams-operator to call teams-api's authenticated /internal/* endpoints (client-credentials grant). Unlike teams-api-sa, no realm-management roles - teams-operator never calls Keycloak's Admin API directly. DEMO secret.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -121,7 +121,7 @@
     {
       "clientId": "argocd",
       "name": "Argo CD",
-      "description": "Argo CD's own native OIDC login (not Dex — see platform-base/argocd.tf). Confidential; clientSecret here must match var.argocd_oidc_client_secret in that separate Terraform-managed deployment — nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
+      "description": "Argo CD's native OIDC login (see platform-base/argocd.tf). clientSecret must match var.argocd_oidc_client_secret there - kept in sync by hand. DEMO secret, rotate for real use.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -158,7 +158,7 @@
     {
       "clientId": "openbao",
       "name": "OpenBao",
-      "description": "OpenBao's native OIDC auth method (auth/oidc) - lets platform users log into the OpenBao UI/CLI with their Keycloak identity instead of a static token. Confidential; clientSecret here must match the oidc_client_secret set on OpenBao's auth/oidc/config (see bootstrap/README.md) - nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
+      "description": "OpenBao's native OIDC auth method (auth/oidc) - lets users log into the OpenBao UI/CLI with their Keycloak identity. clientSecret must match auth/oidc/config's oidc_client_secret (bootstrap/README.md) - kept in sync by hand. DEMO secret.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -196,7 +196,7 @@
     {
       "clientId": "harbor",
       "name": "Harbor",
-      "description": "Harbor's own OIDC login provider (Administration > Configuration > Authentication, auth_mode=oidc_auth) - lets platform users log into Harbor with their Keycloak identity. Confidential; clientSecret here must match Harbor's oidc_client_secret (see bootstrap/README.md) - nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
+      "description": "Harbor's OIDC login (Administration > Configuration > Authentication, auth_mode=oidc_auth). clientSecret must match Harbor's oidc_client_secret (bootstrap/README.md) - kept in sync by hand. DEMO secret.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
