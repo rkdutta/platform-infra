@@ -99,6 +99,15 @@ rules:
 - apiGroups: ["argoproj.io"]
   resources: ["appprojects"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
+# Argo CD Applications, read-only + delete only (see
+# delete_argocd_applications) - cleans up every Application belonging to a
+# project when that project is deleted, since deleting the AppProject does
+# not cascade-delete the Applications that reference it. No create/update:
+# this operator only ever removes Applications, never creates or edits one
+# (that stays a human/GitOps action via Argo CD itself).
+- apiGroups: ["argoproj.io"]
+  resources: ["applications"]
+  verbs: ["get", "list", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
