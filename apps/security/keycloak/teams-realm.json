@@ -103,6 +103,59 @@
       "webOrigins": []
     },
     {
+      "clientId": "teams-operator-sa",
+      "name": "Teams Operator service account",
+      "description": "Confidential client used by teams-operator to call teams-api's authenticated internal endpoints (client-credentials grant) - replaces the previously fully-open /internal/* endpoints. Mirrors teams-api-sa's shape; unlike teams-api-sa this client does NOT get realm-management roles, since teams-operator never calls the Keycloak Admin API directly - it always goes through teams-api. DEMO secret - rotate for real use.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "dev-teams-operator-sa-secret-change-me",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": []
+    },
+    {
+      "clientId": "argocd",
+      "name": "Argo CD",
+      "description": "Argo CD's own native OIDC login (not Dex — see platform-base/argocd.tf). Confidential; clientSecret here must match var.argocd_oidc_client_secret in that separate Terraform-managed deployment — nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "dev-argocd-oidc-secret-change-me",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://argocd.127.0.0.1.sslip.io:8080/auth/callback"
+      ],
+      "webOrigins": [
+        "http://argocd.127.0.0.1.sslip.io:8080"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://argocd.127.0.0.1.sslip.io:8080##http://argocd.127.0.0.1.sslip.io:8080/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "openbao",
       "name": "OpenBao",
       "description": "OpenBao's native OIDC auth method (auth/oidc) - lets platform users log into the OpenBao UI/CLI with their Keycloak identity instead of a static token. Confidential; clientSecret here must match the oidc_client_secret set on OpenBao's auth/oidc/config (see bootstrap/README.md) - nothing keeps the two in sync automatically. DEMO secret — rotate for real use.",
@@ -244,7 +297,8 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["admin", "team-leader"]
+      "realmRoles": ["admin", "team-leader"],
+      "groups": ["/argocd-admins"]
     },
     {
       "username": "service-account-teams-api-sa",
@@ -253,6 +307,11 @@
       "clientRoles": {
         "realm-management": ["manage-users", "view-users", "query-users", "query-groups", "manage-realm"]
       }
+    },
+    {
+      "username": "service-account-teams-operator-sa",
+      "enabled": true,
+      "serviceAccountClientId": "teams-operator-sa"
     }
   ],
   "roles": {
@@ -268,11 +327,16 @@
       {
         "name": "admin",
         "description": "Full administrative access"
+      },
+      {
+        "name": "project-manager",
+        "description": "Can create projects and manage the ones they are assigned to (self-service Project delegation, granted by an admin)"
       }
     ]
   },
   "groups": [
     { "name": "team-sss" },
-    { "name": "team-mmm" }
+    { "name": "team-mmm" },
+    { "name": "argocd-admins" }
   ]
 }
