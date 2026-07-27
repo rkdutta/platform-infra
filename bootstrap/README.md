@@ -170,6 +170,16 @@ today — same class of manual-refresh caveat as `platform-tls` below).
 #    changes again, this policy must change with it or every namespace's
 #    OpenBao policy/role write starts 403ing (confirmed live: this exact
 #    drift happened once already when the prefix moved team- -> project-).
+#    The identity/* and sys/auth grants below are for ensure_openbao_access's
+#    group-alias binding — mapping each namespace's "-maintainer"/"-viewer"
+#    Keycloak groups to that namespace's OpenBao policies, so humans in
+#    those groups get scoped secret access via OIDC SSO login, not just
+#    workload SPIFFE identities. sys/auth is read-only (just enough to look
+#    up the oidc/ mount's accessor); identity/group-alias has no path
+#    suffix to scope by, since its create call doesn't take a name in the
+#    URL (the name is in the request body) - "create","update" only, no
+#    read/list/delete, keeps this to create-if-missing same as everything
+#    else the operator provisions.
 kubectl -n openbao exec -i openbao-0 -- sh -c \
   "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao policy write teams-operator-admin-policy -" <<'EOF'
 path "sys/policies/acl/project-*" {
@@ -177,6 +187,15 @@ path "sys/policies/acl/project-*" {
 }
 path "auth/jwt/role/project-*" {
   capabilities = ["create", "read", "update", "delete"]
+}
+path "identity/group/name/project-*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+path "identity/group-alias" {
+  capabilities = ["create", "update"]
+}
+path "sys/auth" {
+  capabilities = ["read"]
 }
 EOF
 

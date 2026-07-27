@@ -6,7 +6,7 @@
   "bound_claims": {
     "sub": "spiffe://platform.local/ns/{{ NAMESPACE }}/sa/*"
   },
-  "token_policies": ["{{ NAMESPACE }}-policy"],
+  "token_policies": ["{{ NAMESPACE }}-maintainer-policy"],
   "token_ttl": "15m",
   "token_max_ttl": "1h"
 }

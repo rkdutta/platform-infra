@@ -44,10 +44,11 @@ configMapGenerator:
   # openbao-spiffe-volume-*.yaml mutations).
   - name: teams-operator-openbao-policy-templates
     files:
-      - openbao-policy-templates/team.hcl
+      - openbao-policy-templates/project-maintainer.hcl
+      - openbao-policy-templates/project-viewer.hcl
   - name: teams-operator-openbao-role-templates
     files:
-      - openbao-role-templates/team.json
+      - openbao-role-templates/project-maintainer.json
   - name: teams-operator-openbao-agentconfig-templates
     files:
       - openbao-agentconfig-templates/spiffe-helper.conf
