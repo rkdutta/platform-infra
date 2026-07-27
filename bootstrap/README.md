@@ -241,6 +241,11 @@ copy outside the repo; regenerating is equally fine since it's self-signed.
 
 ## OpenBao — enable OIDC login via Keycloak
 
+`bootstrap/enable-oidc-sso.sh openbao` runs everything below (and is
+re-runnable — it checks before enabling the auth method, and `bao write` is
+otherwise a natural overwrite). The commands are kept here too for anyone
+who wants to run them by hand or see exactly what the script does.
+
 One-time setup so a human can log into the OpenBao UI/CLI with their
 Keycloak identity instead of a static token, using OpenBao's native `oidc`
 auth method against the "openbao" client in `apps/security/keycloak`'s
@@ -261,8 +266,7 @@ kubectl -n openbao exec openbao-0 -- sh -c \
 #    because Keycloak's issuer is only reachable over the self-signed
 #    platform-tls cert (see the section above) — same platform-tls Secret
 #    already present in the openbao namespace for its own ingress.
-kubectl get secret platform-tls -n openbao -o jsonpath='{.data.tls\.crt}' \
-  | base64 -d > /tmp/platform-tls.crt
+kubectl get secret platform-tls -n openbao -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/platform-tls.crt
 kubectl -n openbao cp /tmp/platform-tls.crt openbao-0:/tmp/platform-tls.crt
 kubectl -n openbao exec openbao-0 -- sh -c \
   "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao write auth/oidc/config \
@@ -305,6 +309,11 @@ this along with everything else in OpenBao's storage — redo steps 1–3
 after that.
 
 ## Harbor — enable OIDC login via Keycloak
+
+`bootstrap/enable-oidc-sso.sh harbor` runs everything below (and is
+re-runnable — it skips creating `harbor-ca-bundle` if it already exists,
+waits for the rollout Argo CD already triggered before calling the API, and
+the Configurations PUT is a natural overwrite either way).
 
 One-time setup so a human can log into Harbor with their Keycloak identity
 instead of a local Harbor account, using Harbor's built-in OIDC auth mode
