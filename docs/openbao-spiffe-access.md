@@ -94,7 +94,7 @@ getting it into a pod, and getting OpenBao to trust it.
  │  └───────────────┘                           │
  └──────────────────────────────────────────────┘
                 │ bao write/read via
-                │ auth/jwt/login -> kv-teams/data/<namespace>/*
+                │ auth/jwt/login -> kv/data/<namespace>/*
                 ▼
  ┌─────────────────────────────────────────────┐
  │  OpenBao                                    │
@@ -103,7 +103,7 @@ getting it into a pod, and getting OpenBao to trust it.
  │  - per-namespace role: bound_claims.sub     │
  │    matches spiffe://platform.local/ns/<ns>/*│
  │  - per-namespace policy: scoped to          │
- │    kv-teams/data/<namespace>/*              │
+ │    kv/data/<namespace>/*                    │
  └─────────────────────────────────────────────┘
 ```
 
@@ -166,7 +166,7 @@ whose Deployment/Rollout carries `platform.example.com/openbao-access: "true"`
      `127.0.0.1:8207` that **transparently attaches that token to any
      request forwarded through it** (`api_proxy.use_auto_auth_token`).
    - The app container itself does nothing SPIFFE/OpenBao-specific. It just
-     needs to know to call `http://127.0.0.1:8207/v1/kv-teams/...` instead
+     needs to know to call `http://127.0.0.1:8207/v1/kv/...` instead
      of talking to OpenBao directly — the sidecar handles authentication.
 
 **Step 0 (before any of this, per namespace, not per pod):** `teams-operator`
@@ -175,8 +175,8 @@ reconciles every namespace it manages once per poll cycle
 `team-jack-dev`, it:
 - renders `openbao-policy-templates/team.hcl` (substituting the namespace
   name) and `PUT`s it to OpenBao as ACL policy `team-team-jack-dev-policy`,
-  scoped to `kv-teams/data/team-jack-dev/*` and
-  `kv-teams/metadata/team-jack-dev/*`.
+  scoped to `kv/data/team-jack-dev/*` and
+  `kv/metadata/team-jack-dev/*`.
 - renders `openbao-role-templates/team.json` and `PUT`s it as JWT auth role
   `team-team-jack-dev`, with `bound_claims: {sub:
   "spiffe://platform.local/ns/team-jack-dev/sa/*"}` and
@@ -192,6 +192,16 @@ but can never successfully log in (the role doesn't exist yet) or the pod
 can't even start (the `openbao-agent-config` ConfigMap doesn't exist to
 mount).
 
+**The reverse also runs, on namespace deletion**: `delete_openbao_access`
+(called from `delete_namespace`) tears every bit of this back down —
+recursively deletes every actual secret under `kv/<namespace>/*`, both ACL
+policies, the jwt auth role, and the two identity groups that back OIDC SSO
+access for humans (a separate mechanism from everything else on this page —
+see `bootstrap/README.md`'s OpenBao OIDC section) — so a deleted project
+doesn't leave its secrets or access-control objects behind in OpenBao
+forever. Best-effort, same as everything else here: a transient OpenBao
+outage logs an error but never blocks the k8s namespace deletion itself.
+
 ## Step by step: an app reading/writing a secret
 
 Once the pod is running, from the app's point of view this is just an HTTP
@@ -200,7 +210,7 @@ call to `127.0.0.1:8207`:
 ```
 app container                openbao-agent (same pod)              OpenBao
      │                              │                                   │
-     │  POST /v1/kv-teams/data/     │                                   │
+     │  POST /v1/kv/data/           │                                   │
      │  team-jack-dev/foo           │                                   │
      │ ────────────────────────────►│                                   │
      │  {"data":{"key":"value"}}    │  attaches X-Vault-Token           │
@@ -360,5 +370,5 @@ kubectl exec <pod> -n <team-namespace> -c openbao-agent -- sh -c \
 
 # Try a real read/write through the proxy, the same way an app would
 kubectl exec <pod> -n <team-namespace> -c openbao-agent -- sh -c \
-  'BAO_ADDR=http://127.0.0.1:8207 bao read kv-teams/data/<team-namespace>/<path>'
+  'BAO_ADDR=http://127.0.0.1:8207 bao read kv/data/<team-namespace>/<path>'
 ```

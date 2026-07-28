@@ -115,10 +115,11 @@ commands below run with the root token from `bootstrap/init-keys.json`
 ```sh
 BAO_TOKEN=$(jq -r '.root_token' bootstrap/init-keys.json)
 
-# 1) KV-v2 mount for every team's secrets, isolated by path + policy (see
-#    openbao-policy-templates/team.hcl) rather than one mount per team.
+# 1) KV-v2 mount for every project's secrets, isolated by path + policy
+#    (see openbao-policy-templates/project-{maintainer,viewer}.hcl) rather
+#    than one mount per project.
 kubectl -n openbao exec openbao-0 -- sh -c \
-  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao secrets enable -path=kv-teams kv-v2"
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao secrets enable -path=kv kv-v2"
 
 # 2) JWT auth method, trusting SPIRE's OIDC discovery provider as the JWKS
 #    source. That provider serves its JWKS over HTTPS using its own SPIFFE
@@ -180,6 +181,11 @@ today — same class of manual-refresh caveat as `platform-tls` below).
 #    URL (the name is in the request body) - "create","update" only, no
 #    read/list/delete, keeps this to create-if-missing same as everything
 #    else the operator provisions.
+#    kv/metadata/project-* (read/list/delete) is for delete_openbao_access -
+#    recursively wiping a project's actual secret data when its namespace is
+#    deleted, alongside the policy/role/group cleanup above. No corresponding
+#    kv/data/* grant - metadata delete removes every version outright, so
+#    the operator never needs to touch the data path directly.
 kubectl -n openbao exec -i openbao-0 -- sh -c \
   "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao policy write teams-operator-admin-policy -" <<'EOF'
 path "sys/policies/acl/project-*" {
@@ -196,6 +202,9 @@ path "identity/group-alias" {
 }
 path "sys/auth" {
   capabilities = ["read"]
+}
+path "kv/metadata/project-*" {
+  capabilities = ["read", "list", "delete"]
 }
 EOF
 
