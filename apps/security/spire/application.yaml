@@ -49,6 +49,30 @@ spec:
             enabled: false
           deleteHooks:
             enabled: false
+        spire-server:
+          controllerManager:
+            identities:
+              clusterSPIFFEIDs:
+                # The chart's own oidc-discovery-provider default only sets
+                # dnsNameTemplates: ["oidc-discovery.{{ .TrustDomain }}"] and
+                # relies on autoPopulateDNSNames (also chart-default: true) to
+                # add the rest from the pod's Service — but that auto-population
+                # stops at "<svc>.<namespace>.svc", never reaching the fully-
+                # qualified "...svc.cluster.local" form. Confirmed live: OpenBao
+                # (and anything else validating this endpoint's TLS cert against
+                # the conventional in-cluster FQDN) got "certificate is valid
+                # for ... .svc, not ... .svc.cluster.local" — the discovery
+                # document's own `issuer` claim uses the FQDN, but the leaf
+                # cert's SAN list never included it, so no oidc_discovery_url
+                # value could satisfy both TLS hostname verification and OIDC
+                # issuer-consistency at once. Re-declaring dnsNameTemplates
+                # here (Helm replaces arrays wholesale, so the original entry
+                # must be repeated) adds the missing FQDN explicitly, alongside
+                # the chart's own default.
+                oidc-discovery-provider:
+                  dnsNameTemplates:
+                    - "oidc-discovery.{{ .TrustDomain }}"
+                    - "spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local"
   destination:
     server: https://kubernetes.default.svc
     # Chart places resources in spire-server / spire-system explicitly and
