@@ -28,6 +28,14 @@ destroy: ## terraform destroy (platform-base) — tear down the cluster
 secrets: ## Create out-of-band secrets (repo creds, platform-tls, ghcr)
 	./create-secrets.sh
 
-bootstrap: apply secrets ## Bootstrap the cluster (platform-base + platform-infra)
+projects: ## Apply all project manifests
+	kubectl apply -f projects/
+
+deploy-root-app: ## Deploy the root app (platform-infra) to the cluster
+	kubectl apply -f root-app.yaml
+
+bootstrap: ## Bootstrap the cluster (platform-base + platform-infra)
 	$(MAKE) apply
 	$(MAKE) secrets
+	$(MAKE) projects
+	$(MAKE) deploy-root-app
