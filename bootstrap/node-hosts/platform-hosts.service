@@ -1,0 +1,18 @@
+[Unit]
+Description=Restore platform *.127.0.0.1.sslip.io /etc/hosts routing (kind node)
+Documentation=platform-infra/bootstrap/README.md
+# Run once networking is up, but BEFORE kubelet launches the static pods
+# (kube-apiserver) and before containerd starts pulling — so those come up
+# already able to resolve the routed names.
+After=network-online.target
+Wants=network-online.target
+Before=kubelet.service
+ConditionPathExists=/usr/local/bin/platform-hosts-fix.sh
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/platform-hosts-fix.sh
+
+[Install]
+WantedBy=multi-user.target
