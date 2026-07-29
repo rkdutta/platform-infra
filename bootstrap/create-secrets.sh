@@ -98,6 +98,16 @@ apply_platform_tls() {
       --dry-run=client -o yaml | kubectl apply -f - >/dev/null
     ok "platform-tls in $ns"
   done
+
+  # Harbor's chart (caBundleSecretName: harbor-ca-bundle) wants the SAME cert
+  # under key `ca.crt`, so harbor-core trusts platform-tls when reaching
+  # Keycloak's OIDC discovery. Without it harbor-core hangs on a missing-secret
+  # mount. Generic (not tls) secret, ca.crt key.
+  ensure_ns harbor
+  kubectl -n harbor create secret generic harbor-ca-bundle \
+    --from-file=ca.crt="$TLS_CRT" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  ok "harbor-ca-bundle in harbor"
 }
 
 # ---- 3. GHCR pull credentials for harbor-replication ------------------------
