@@ -1,0 +1,19 @@
+# Azure SQL provider (Upbound family provider). Brings the Microsoft.Sql
+# managed-resource CRDs (MSSQLServer, MSSQLDatabase, MSSQLFirewallRule, ...)
+# under the API group sql.azure.upbound.io.
+#
+# Installing this ALSO auto-installs provider-family-azure as a package
+# dependency — that is the package that provides the `ProviderConfig` kind
+# (azure.upbound.io) every Azure managed resource references. You do not list
+# it separately.
+#
+# ⚠ Pin the tag to a REAL published version. Check the latest at
+#   https://marketplace.upbound.io/providers/upbound/provider-azure-sql
+# and replace the tag below if newer. An invalid tag applies fine but the
+# Provider stays Unhealthy ("cannot resolve package").
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-sql
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-sql:v1.11.1

@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-providers
+  namespace: argocd
+  # Wave 1: providers install after crossplane core (wave 0) has established the
+  # Provider CRD, and before ProviderConfigs/Compositions (later waves) that
+  # reference the CRDs these providers bring. Provider pods take a minute to
+  # pull the package image and become Healthy; Argo's retry absorbs the gap.
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: resource
+spec:
+  project: resource
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/resource/crossplane-providers/manifests
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

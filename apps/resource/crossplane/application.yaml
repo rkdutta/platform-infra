@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane
+  namespace: argocd
+  # Wave 0: the Crossplane core must be installed (and its Provider/
+  # Configuration/Function CRDs established) before anything that installs a
+  # Provider package or defines Compositions/XRDs in a later wave. Standalone,
+  # Argo CD's retry converges those once these CRDs exist.
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: resource
+spec:
+  project: resource
+  # Declarative equivalent of:
+  #   helm repo add crossplane-stable https://charts.crossplane.io/stable
+  #   helm upgrade --install crossplane crossplane-stable/crossplane \
+  #     -n crossplane-system --create-namespace
+  # Installs the Crossplane core controller + its CRDs (Provider, Configuration,
+  # Function, ProviderConfig plumbing). Providers and Compositions are added
+  # later as their own manifests once we've practised with them by hand.
+  source:
+    repoURL: https://charts.crossplane.io/stable
+    chart: crossplane
+    targetRevision: 2.3.4
+    helm:
+      releaseName: crossplane
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Crossplane ships large CRDs; server-side apply avoids the
+      # "metadata.annotations: Too long" client-side apply error (same reason
+      # cloudnative-pg uses it).
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

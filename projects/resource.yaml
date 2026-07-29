@@ -14,6 +14,7 @@ spec:
   sourceRepos:
     - https://kubernetes.github.io/ingress-nginx
     - https://cloudnative-pg.github.io/charts
+    - https://charts.crossplane.io/stable
     - https://github.com/rkdutta/platform-infra.git
   destinations:
     - server: https://kubernetes.default.svc
