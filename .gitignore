@@ -6,4 +6,8 @@ bootstrap/repo-credentials.yaml
 bootstrap/repo-credentials*.yaml
 # Real GHCR pull credentials (PAT) — never commit; only the *.example.yaml is tracked
 apps/integration-delivery/harbor-replication/ghcr-credentials.yaml
+# Generated wildcard TLS cert/key for *.127.0.0.1.sslip.io (the .key is private)
+# — persisted by create-secrets.sh so the cert is stable across rebuilds
+bootstrap/platform-tls.crt
+bootstrap/platform-tls.key
 *.bak
