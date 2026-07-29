@@ -110,6 +110,14 @@ spec:
                 printf '{"name":"ghcr","type":"github-ghcr","url":"https://ghcr.io","insecure":false,"credential":{"type":"basic","access_key":"%s","access_secret":"%s"}}' \
                   "$GHCR_USERNAME" "$GHCR_TOKEN"
               }
+              # PUT /registries/{id} takes a RegistryUpdate: FLAT credential fields
+              # (credential_type/access_key/access_secret), and `type` is immutable
+              # so it must be omitted. Reusing reg_body() here returns 400, which
+              # (curl -sf + sh -e) aborts the job on every re-sync after the first.
+              reg_update_body() {
+                printf '{"name":"ghcr","url":"https://ghcr.io","insecure":false,"credential_type":"basic","access_key":"%s","access_secret":"%s"}' \
+                  "$GHCR_USERNAME" "$GHCR_TOKEN"
+              }
               # $1 = policy name, $2 = ghcr repo (pulled as rkdutta/$2), $3 = registry id.
               pol_body() {
                 printf '{"name":"%s","description":"Pull %s (+cosign sig/att) from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/%s"},{"type":"tag","value":"**"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
@@ -124,7 +132,7 @@ spec:
                 reg_id=$(curl -s -u "$AUTH" "$API/registries?name=ghcr" | first_id)
               else
                 echo "ghcr registry exists (id=$reg_id); refreshing credentials"
-                reg_body | curl -sf -u "$AUTH" -X PUT "$API/registries/$reg_id" -H 'Content-Type: application/json' -d @-
+                reg_update_body | curl -sf -u "$AUTH" -X PUT "$API/registries/$reg_id" -H 'Content-Type: application/json' -d @-
               fi
               echo "ghcr registry id=$reg_id"
 
