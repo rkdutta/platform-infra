@@ -97,6 +97,12 @@ spec:
               # before the policy's own id, so anchor on the (unique) policy name.
               # $1 = policy name; reads the JSON list on stdin.
               pol_id_of() { grep -o "\"id\":[0-9]\{1,\},\"name\":\"$1\"" | head -1 | tr -dc '0-9' || true; }
+              # Registry id by EXACT name. Harbor's ?name= filter is FUZZY
+              # (substring), so ?name=ghcr also returns e.g. sidecar-ghcr-io (from
+              # the sidecar-images job). Matching the exact name avoids grabbing the
+              # wrong registry's id — which made the update PUT try to rename it and
+              # fail with 409 "registry ghcr already exists".
+              reg_id_of() { grep -o "\"id\":[0-9]\{1,\},\"name\":\"$1\"" | head -1 | tr -dc '0-9' || true; }
 
               echo "waiting for the Harbor API..."
               i=0
@@ -125,11 +131,11 @@ spec:
               }
 
               # 1) GHCR registry endpoint (create or update credentials)
-              reg_id=$(curl -s -u "$AUTH" "$API/registries?name=ghcr" | first_id)
+              reg_id=$(curl -s -u "$AUTH" "$API/registries?name=ghcr" | reg_id_of ghcr)
               if [ -z "$reg_id" ]; then
                 echo "creating ghcr registry endpoint"
                 reg_body | curl -sf -u "$AUTH" -X POST "$API/registries" -H 'Content-Type: application/json' -d @-
-                reg_id=$(curl -s -u "$AUTH" "$API/registries?name=ghcr" | first_id)
+                reg_id=$(curl -s -u "$AUTH" "$API/registries?name=ghcr" | reg_id_of ghcr)
               else
                 echo "ghcr registry exists (id=$reg_id); refreshing credentials"
                 reg_update_body | curl -sf -u "$AUTH" -X PUT "$API/registries/$reg_id" -H 'Content-Type: application/json' -d @-
