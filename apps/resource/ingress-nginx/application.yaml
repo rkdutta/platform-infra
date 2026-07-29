@@ -33,6 +33,13 @@ spec:
           # With hostPort we don't need a LoadBalancer/NodePort Service.
           service:
             type: ClusterIP
+            # Pin the ClusterIP so it's deterministic across cluster recreation.
+            # The kind nodes' /etc/hosts routing fix (bootstrap/node-hosts/,
+            # installed by platform-base) hardcodes this value to route
+            # harbor.127.0.0.1.sslip.io -> the ingress from containerd. Keep the
+            # two in sync. (Immutable on an existing Service, so this only takes
+            # effect on a freshly created cluster.)
+            clusterIP: "10.96.209.177"
           # Schedule onto the control-plane node kind labeled `ingress-ready`
           # (see platform-base main.tf) and tolerate its control-plane taint.
           nodeSelector:

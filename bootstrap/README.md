@@ -443,6 +443,16 @@ consults CoreDNS. This needs three separate fixes, all at the Docker/node
 level (outside Kubernetes' reach, so **not** GitOps-managed — redo after a
 node or cluster rebuild):
 
+> **The `/etc/hosts` routing (step 1 below, and the equivalent for
+> `platform-auth` in the OIDC section) is now handled durably** by a systemd
+> unit — `bootstrap/node-hosts/platform-hosts.service` — installed on every node
+> automatically by `platform-base` (`node-hosts.tf`). It re-adds the entries on
+> every boot, so it survives node restarts *and* cluster recreation. You should
+> not need step 1 by hand anymore; steps 2–3 (containerd CA trust) remain
+> manual. The `harbor` target IP is the ingress ClusterIP, now **pinned** via
+> `apps/resource/ingress-nginx` (`controller.service.clusterIP`) so it stays
+> constant across recreation and matches the value hardcoded in the unit.
+
 ```sh
 # 1) Route the hostname to the in-cluster ingress from each node's own
 #    network namespace (kube-proxy's rules make the ClusterIP reachable
@@ -518,6 +528,9 @@ docker cp /tmp/platform-tls.crt platform-base-control-plane:/etc/kubernetes/pki/
 # b) The issuer URL includes port 8443, which — unlike Harbor's 443 — only
 #    exists as a *host*-level Docker port mapping, not reachable via the
 #    ClusterIP trick. Docker Desktop's host.docker.internal reaches it anyway:
+# NOTE: this /etc/hosts entry is now applied automatically on every boot by the
+# platform-hosts.service systemd unit (bootstrap/node-hosts/, installed on every
+# node by platform-base) — you only need this by hand if that unit is absent.
 IP=$(docker exec platform-base-control-plane getent hosts host.docker.internal | awk '{print $1}')
 docker exec platform-base-control-plane sh -c \
   "grep -q platform-auth.127.0.0.1.sslip.io /etc/hosts || echo '$IP platform-auth.127.0.0.1.sslip.io' >> /etc/hosts"
