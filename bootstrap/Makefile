@@ -7,9 +7,10 @@
 PLATFORM_BASE ?= ../../platform-base
 TF            := terraform -chdir=$(PLATFORM_BASE)
 OPENBAO_NS    ?= openbao
+TEAMS_NS      ?= engineering-platform
 
 .DEFAULT_GOAL := help
-.PHONY: help init apply destroy secrets projects deploy-root-app openbao harbor-pull bootstrap
+.PHONY: help init apply destroy secrets projects deploy-root-app openbao harbor-pull teams-api-access bootstrap
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -50,6 +51,9 @@ openbao: ## Init + unseal OpenBao once it's up (runs openbao.sh; skips if alread
 harbor-pull: ## Create the Harbor pull robot + imagePullSecret (needs Harbor Healthy; waits for it)
 	./create-secrets.sh harbor-pull
 
+teams-api-access: ## (Re)create teams-api-k8s-access ConfigMap (apiserver URL + CA for GET /kubeconfig; wiped by cluster recreate)
+	TEAMS_NS=$(TEAMS_NS) ./teams-api-access.sh
+
 bootstrap: ## Bootstrap the cluster (platform-base + platform-infra)
 	$(MAKE) apply
 	$(MAKE) secrets
@@ -57,3 +61,4 @@ bootstrap: ## Bootstrap the cluster (platform-base + platform-infra)
 	$(MAKE) deploy-root-app
 	$(MAKE) openbao
 	$(MAKE) harbor-pull
+	$(MAKE) teams-api-access
