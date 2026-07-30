@@ -16,8 +16,9 @@
 #       - ghcr-teams-app    -> rkdutta/teams-app
 #       - ghcr-teams-api    -> rkdutta/teams-api
 #       - ghcr-teams-operator -> rkdutta/teams-operator
-#     Each: tag "**" (carries the cosign sha256-<digest>.sig / .att artifacts —
-#     required for keyless verify), dest namespace `platform`, flatten-all so
+#     Each: tag "{2.1.*,sha256-**}" — the 2.1.x release line PLUS the cosign
+#     sha256-<digest>.sig / .att artifacts (sha256-** is required for keyless
+#     verify; dropping it would break Ratify), dest namespace `platform`, flatten-all so
 #     they land at platform/<repo> (matching the deploy manifests the demo-go
 #     and demo-py ApplicationSets read).
 #       - scheduled every 10 minutes
@@ -125,8 +126,12 @@ spec:
                   "$GHCR_USERNAME" "$GHCR_TOKEN"
               }
               # $1 = policy name, $2 = ghcr repo (pulled as rkdutta/$2), $3 = registry id.
+              # Tag filter: replicate the 2.1.x release line only (NOT every
+              # historical tag), but the alternation MUST also keep sha256-** so
+              # the cosign sha256-<digest>.sig / .att artifacts still come across
+              # — without them keyless verify (Ratify) fails on the pulled images.
               pol_body() {
-                printf '{"name":"%s","description":"Pull %s (+cosign sig/att) from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/%s"},{"type":"tag","value":"**"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
+                printf '{"name":"%s","description":"Pull %s 2.1.x (+cosign sig/att) from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/%s"},{"type":"tag","value":"{2.1.*,sha256-**}"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
                   "$1" "$2" "$3" "$2"
               }
 
