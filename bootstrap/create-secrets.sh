@@ -163,9 +163,19 @@ apply_harbor_pull() {
   # Resolve the platform project id — Harbor won't list project-scoped robots
   # without an explicit ProjectID in the query (the plain /robots list, which
   # only shows SYSTEM robots, silently omits them).
-  local pid
-  pid=$(curl -sk -u "$auth" "$api/projects?name=platform" | jq -r '.[0].project_id // empty')
-  [ -n "$pid" ] || die "Harbor 'platform' project not found (is Harbor fully synced?)"
+  #
+  # On a fresh cluster the `platform` project doesn't exist until the GHCR
+  # replication first pushes into it (Harbor auto-creates it then), which lags
+  # Harbor becoming Healthy. So wait for it rather than failing outright — this
+  # lets `make bootstrap` run this step end-to-end without a manual pause.
+  local pid="" j=0
+  while [ -z "$pid" ]; do
+    pid=$(curl -sk -u "$auth" "$api/projects?name=platform" | jq -r '.[0].project_id // empty')
+    [ -n "$pid" ] && break
+    j=$((j + 1))
+    [ "$j" -gt 60 ] && die "Harbor 'platform' project not found after 5m — has GHCR replication run yet? (check the harbor-replication job)"
+    skip "waiting for Harbor 'platform' project ($j/60)…"; sleep 5
+  done
 
   # A project-scoped robot's secret is returned ONLY at creation and can't be
   # read back, so to stay idempotent we delete any existing `pull` robot, then
@@ -209,7 +219,7 @@ main() {
     harbor-pull) apply_harbor_pull ;;
     *)           die "unknown target '$1' (use: all | repo-creds | tls | ghcr | harbor-pull)" ;;
   esac
-  log "Done. Next: kubectl apply -f projects/ && kubectl apply -f bootstrap/root-app.yaml"
+  log "Done."
 }
 
 main "$@"
