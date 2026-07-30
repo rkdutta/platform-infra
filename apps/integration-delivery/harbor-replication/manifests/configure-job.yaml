@@ -16,9 +16,10 @@
 #       - ghcr-teams-app    -> rkdutta/teams-app
 #       - ghcr-teams-api    -> rkdutta/teams-api
 #       - ghcr-teams-operator -> rkdutta/teams-operator
-#     Each: tag "{2.1.*,sha256-**}" — the 2.1.x release line PLUS the cosign
-#     sha256-<digest>.sig / .att artifacts (sha256-** is required for keyless
-#     verify; dropping it would break Ratify), dest namespace `platform`, flatten-all so
+#     Tag filter is per-repo: teams-{app,api,operator} use "{2.1.*,sha256-**}"
+#     (the 2.1.x release line PLUS the cosign sha256-<digest>.sig / .att
+#     artifacts — sha256-** is required for keyless verify, dropping it would
+#     break Ratify); demo-* keep "**" (every tag). dest namespace `platform`, flatten-all so
 #     they land at platform/<repo> (matching the deploy manifests the demo-go
 #     and demo-py ApplicationSets read).
 #       - scheduled every 10 minutes
@@ -126,13 +127,15 @@ spec:
                   "$GHCR_USERNAME" "$GHCR_TOKEN"
               }
               # $1 = policy name, $2 = ghcr repo (pulled as rkdutta/$2), $3 = registry id.
-              # Tag filter: replicate the 2.1.x release line only (NOT every
-              # historical tag), but the alternation MUST also keep sha256-** so
-              # the cosign sha256-<digest>.sig / .att artifacts still come across
-              # — without them keyless verify (Ratify) fails on the pulled images.
+              # $1 = policy name, $2 = ghcr repo (pulled as rkdutta/$2), $3 = registry id,
+              # $4 = tag filter pattern. The tag filter is per-repo (see the loop):
+              # teams-* narrow to the 2.1.x line, but the alternation MUST keep
+              # sha256-** so the cosign sha256-<digest>.sig / .att artifacts still
+              # come across — without them keyless verify (Ratify) fails on the
+              # pulled images. demo-* stay on "**" (every tag).
               pol_body() {
-                printf '{"name":"%s","description":"Pull %s 2.1.x (+cosign sig/att) from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/%s"},{"type":"tag","value":"{2.1.*,sha256-**}"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
-                  "$1" "$2" "$3" "$2"
+                printf '{"name":"%s","description":"Pull %s (+cosign sig/att) from GHCR","enabled":true,"override":true,"deletion":false,"replicate_deletion":false,"src_registry":{"id":%s},"dest_namespace":"platform","dest_namespace_replace_count":-1,"filters":[{"type":"name","value":"rkdutta/%s"},{"type":"tag","value":"%s"}],"trigger":{"type":"scheduled","trigger_settings":{"cron":"0 */10 * * * *"}}}' \
+                  "$1" "$2" "$3" "$2" "$4"
               }
 
               # 1) GHCR registry endpoint (create or update credentials)
@@ -157,14 +160,20 @@ spec:
               #    platform components (built by the platform-idp release.yml).
               for repo in $(cat /config/repos.txt); do
                 polname="ghcr-$repo"
+                # teams-* (the platform components) narrow to the 2.1.x release
+                # line + cosign artifacts; demo-* keep every tag ("**").
+                case "$repo" in
+                  teams-app|teams-api|teams-operator) tagf='{2.1.*,sha256-**}' ;;
+                  *) tagf='**' ;;
+                esac
                 pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
                 if [ -z "$pol_id" ]; then
-                  echo "creating replication policy $polname"
-                  pol_body "$polname" "$repo" "$reg_id" | curl -sf -u "$AUTH" -X POST "$API/replication/policies" -H 'Content-Type: application/json' -d @-
+                  echo "creating replication policy $polname (tag=$tagf)"
+                  pol_body "$polname" "$repo" "$reg_id" "$tagf" | curl -sf -u "$AUTH" -X POST "$API/replication/policies" -H 'Content-Type: application/json' -d @-
                   pol_id=$(curl -s -u "$AUTH" "$API/replication/policies?name=$polname" | pol_id_of "$polname")
                 else
-                  echo "$polname exists (id=$pol_id); updating"
-                  pol_body "$polname" "$repo" "$reg_id" | curl -sf -u "$AUTH" -X PUT "$API/replication/policies/$pol_id" -H 'Content-Type: application/json' -d @-
+                  echo "$polname exists (id=$pol_id); updating (tag=$tagf)"
+                  pol_body "$polname" "$repo" "$reg_id" "$tagf" | curl -sf -u "$AUTH" -X PUT "$API/replication/policies/$pol_id" -H 'Content-Type: application/json' -d @-
                 fi
                 echo "$polname id=$pol_id"
 
