@@ -10,7 +10,7 @@ OPENBAO_NS    ?= openbao
 TEAMS_NS      ?= engineering-platform
 
 .DEFAULT_GOAL := help
-.PHONY: help init apply destroy secrets projects deploy-root-app openbao harbor-pull teams-api-access bootstrap
+.PHONY: help init apply destroy secrets projects deploy-root-app openbao openbao-kv openbao-sso openbao-jwt openbao-access harbor-pull teams-api-access bootstrap
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -48,6 +48,22 @@ openbao: ## Init + unseal OpenBao once it's up (runs openbao.sh; skips if alread
 		bash openbao.sh; \
 	fi
 
+# ── OpenBao runtime access (wiped by a cluster/PVC recreate; needs `openbao`
+#    init done first, plus Keycloak up for -sso and SPIRE up for -jwt) ──
+openbao-kv: ## Enable the KV-v2 secrets engine at kv/ (idempotent)
+	./enable-openbao-kv.sh
+
+openbao-sso: ## Enable OpenBao human OIDC SSO login via Keycloak (idempotent)
+	./enable-oidc-sso.sh openbao
+
+openbao-jwt: ## Enable OpenBao SPIRE/SPIFFE workload jwt auth + operator role (idempotent; re-run to refresh a rotated SPIRE CA)
+	./enable-openbao-jwt.sh
+
+openbao-access: ## Full post-recreate OpenBao runtime bootstrap (kv mount + human SSO + workload jwt)
+	$(MAKE) openbao-kv
+	$(MAKE) openbao-sso
+	$(MAKE) openbao-jwt
+
 harbor-pull: ## Create the Harbor pull robot + imagePullSecret (needs Harbor Healthy; waits for it)
 	./create-secrets.sh harbor-pull
 
@@ -61,4 +77,5 @@ bootstrap: ## Bootstrap the cluster (platform-base + platform-infra)
 	$(MAKE) deploy-root-app
 	$(MAKE) openbao
 	$(MAKE) harbor-pull
+	$(MAKE) openbao-access
 	$(MAKE) teams-api-access
