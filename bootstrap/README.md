@@ -443,15 +443,24 @@ consults CoreDNS. This needs three separate fixes, all at the Docker/node
 level (outside Kubernetes' reach, so **not** GitOps-managed — redo after a
 node or cluster rebuild):
 
-> **The `/etc/hosts` routing (step 1 below, and the equivalent for
-> `platform-auth` in the OIDC section) is now handled durably** by a systemd
-> unit — `bootstrap/node-hosts/platform-hosts.service` — installed on every node
-> automatically by `platform-base` (`node-hosts.tf`). It re-adds the entries on
-> every boot, so it survives node restarts *and* cluster recreation. You should
-> not need step 1 by hand anymore; steps 2–3 (containerd CA trust) remain
-> manual. The `harbor` target IP is the ingress ClusterIP, now **pinned** via
-> `apps/resource/ingress-nginx` (`controller.service.clusterIP`) so it stays
-> constant across recreation and matches the value hardcoded in the unit.
+> **Steps 1 and 2 are now automated and survive cluster recreation — you should
+> not need them by hand anymore.**
+> - **Step 1 (`/etc/hosts` routing)**, and the equivalent for `platform-auth` in
+>   the OIDC section, is handled by a systemd unit —
+>   `bootstrap/node-hosts/platform-hosts.service` — installed on every node by
+>   `platform-base` (`node-hosts.tf`), re-adding the entries on every boot. The
+>   `harbor` target IP is the ingress ClusterIP, **pinned** via
+>   `apps/resource/ingress-nginx` (`controller.service.clusterIP`) so it stays
+>   constant across recreation and matches the value hardcoded in the unit.
+> - **Step 2 (containerd CA trust)** is installed by `platform-base`
+>   (`node-containerd-trust.tf`), which `docker cp`s the Terraform-generated
+>   `platform-tls.crt` into each node and reloads containerd, keyed to the
+>   cluster CA so it re-runs on rebuild.
+>
+> **Step 3 (Harbor pull robot) is now scripted** but still a manual invocation —
+> it needs Harbor's API live, so it can't run in Terraform. Run it once Harbor is
+> Synced & Healthy: `./create-secrets.sh harbor-pull` (idempotent). The manual
+> commands below are kept only as the reference of what these automate.
 
 ```sh
 # 1) Route the hostname to the in-cluster ingress from each node's own

@@ -160,11 +160,20 @@ apply_harbor_pull() {
   done
   ok "Harbor API reachable"
 
+  # Resolve the platform project id — Harbor won't list project-scoped robots
+  # without an explicit ProjectID in the query (the plain /robots list, which
+  # only shows SYSTEM robots, silently omits them).
+  local pid
+  pid=$(curl -sk -u "$auth" "$api/projects?name=platform" | jq -r '.[0].project_id // empty')
+  [ -n "$pid" ] || die "Harbor 'platform' project not found (is Harbor fully synced?)"
+
   # A project-scoped robot's secret is returned ONLY at creation and can't be
   # read back, so to stay idempotent we delete any existing `pull` robot, then
-  # recreate it and capture the fresh secret. Full name is robot$platform+pull.
+  # recreate it and capture the fresh secret. Full name is robot$platform+pull;
+  # project robots must be queried with q=Level=project,ProjectID=<id>.
   local existing_id
-  existing_id=$(curl -sk -u "$auth" "$api/robots?page_size=100" 2>/dev/null \
+  existing_id=$(curl -sk -u "$auth" -G "$api/robots" \
+    --data-urlencode "q=Level=project,ProjectID=$pid" --data "page_size=100" 2>/dev/null \
     | jq -r '.[] | select(.name=="robot$platform+pull") | .id' | head -1 || true)
   if [ -n "$existing_id" ]; then
     curl -sk -u "$auth" -X DELETE "$api/robots/$existing_id" >/dev/null || true
