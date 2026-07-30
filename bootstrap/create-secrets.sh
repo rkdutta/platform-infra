@@ -12,6 +12,9 @@
 #   2. platform-tls wildcard cert      (namespaces: openbao harbor keycloak
 #                                        engineering-platform)
 #   3. GHCR pull credentials           (namespace: harbor)
+#   4. Harbor pull robot + secret      (namespace: engineering-platform)
+#      — NOT in `all`: needs Harbor's API LIVE, so run it LATER (after root-app
+#        has synced and Harbor is Healthy):  ./create-secrets.sh harbor-pull
 #
 # Secret VALUES live in git-ignored files (repo-credentials*.yaml,
 # harbor-replication/ghcr-credentials.yaml) and in a generated platform-tls
@@ -19,6 +22,7 @@
 #
 # Usage:
 #   ./create-secrets.sh [all|repo-creds|tls|ghcr]      (default: all)
+#   ./create-secrets.sh harbor-pull                    (run after Harbor Healthy)
 # =============================================================================
 set -euo pipefail
 
@@ -123,14 +127,78 @@ apply_ghcr() {
   fi
 }
 
+# ---- 4. Harbor pull robot + imagePullSecret ---------------------------------
+# UNLIKE the steps above, this needs Harbor's API to be LIVE — Harbor is deployed
+# by Argo CD (root-app), i.e. only AFTER this script's `all` run. So it is NOT in
+# `all`; run it separately once Harbor is Synced & Healthy.
+#
+# Harbor's `platform` project is private, so the teams-* Deployments in
+# engineering-platform pull with the `harbor-pull` imagePullSecret — backed by a
+# project-scoped, pull-only Harbor robot. (Tenant namespaces get their own pull
+# secret from teams-operator; only the platform's own namespace must be
+# bootstrapped here, since the operator can't create its own pull secret before
+# it can pull its own image.) Both the robot (Harbor DB) and the k8s secret are
+# wiped on a cluster rebuild, so this recreates them idempotently. Replaces the
+# manual "step 3" robot creation in README.md.
+HARBOR_URL="${HARBOR_URL:-https://harbor.127.0.0.1.sslip.io:8443}"
+HARBOR_ADMIN_PASSWORD="${HARBOR_ADMIN_PASSWORD:-Harbor12345}"
+HARBOR_PULL_NS="${HARBOR_PULL_NS:-engineering-platform}"
+
+apply_harbor_pull() {
+  log "Harbor pull robot + imagePullSecret (namespace: $HARBOR_PULL_NS)"
+  command -v jq >/dev/null || die "jq not found in PATH (needed to parse Harbor's robot response)"
+  ensure_ns "$HARBOR_PULL_NS"
+
+  local api="$HARBOR_URL/api/v2.0" auth="admin:$HARBOR_ADMIN_PASSWORD"
+
+  # Wait for Harbor's API — it may still be syncing when this is run.
+  local i=0
+  until [ "$(curl -sk -o /dev/null -w '%{http_code}' -u "$auth" "$api/systeminfo" || true)" = "200" ]; do
+    i=$((i + 1))
+    [ "$i" -gt 30 ] && die "Harbor API not reachable at $api after 30 tries — is Harbor Synced & Healthy?"
+    skip "waiting for Harbor API ($i/30)…"; sleep 5
+  done
+  ok "Harbor API reachable"
+
+  # A project-scoped robot's secret is returned ONLY at creation and can't be
+  # read back, so to stay idempotent we delete any existing `pull` robot, then
+  # recreate it and capture the fresh secret. Full name is robot$platform+pull.
+  local existing_id
+  existing_id=$(curl -sk -u "$auth" "$api/robots?page_size=100" 2>/dev/null \
+    | jq -r '.[] | select(.name=="robot$platform+pull") | .id' | head -1 || true)
+  if [ -n "$existing_id" ]; then
+    curl -sk -u "$auth" -X DELETE "$api/robots/$existing_id" >/dev/null || true
+    skip "deleted stale robot id=$existing_id (its secret can't be re-read)"
+  fi
+
+  local resp rname rsecret
+  resp=$(curl -sk -u "$auth" -X POST "$api/robots" -H 'Content-Type: application/json' -d '{
+    "name":"pull","duration":-1,"level":"project",
+    "permissions":[{"kind":"project","namespace":"platform",
+      "access":[{"resource":"repository","action":"pull"}]}]}')
+  rname=$(echo "$resp" | jq -r '.name // empty')
+  rsecret=$(echo "$resp" | jq -r '.secret // empty')
+  [ -n "$rname" ] && [ -n "$rsecret" ] \
+    || die "robot creation failed: $(echo "$resp" | jq -c '{errors}' 2>/dev/null || echo "$resp")"
+  ok "robot $rname created"
+
+  kubectl -n "$HARBOR_PULL_NS" create secret docker-registry harbor-pull \
+    --docker-server=harbor.127.0.0.1.sslip.io \
+    --docker-username="$rname" \
+    --docker-password="$rsecret" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  ok "harbor-pull imagePullSecret in $HARBOR_PULL_NS"
+}
+
 main() {
   require_cluster
   case "${1:-all}" in
-    all)        apply_repo_creds; apply_platform_tls; apply_ghcr ;;
-    repo-creds) apply_repo_creds ;;
-    tls)        apply_platform_tls ;;
-    ghcr)       apply_ghcr ;;
-    *)          die "unknown target '$1' (use: all | repo-creds | tls | ghcr)" ;;
+    all)         apply_repo_creds; apply_platform_tls; apply_ghcr ;;
+    repo-creds)  apply_repo_creds ;;
+    tls)         apply_platform_tls ;;
+    ghcr)        apply_ghcr ;;
+    harbor-pull) apply_harbor_pull ;;
+    *)           die "unknown target '$1' (use: all | repo-creds | tls | ghcr | harbor-pull)" ;;
   esac
   log "Done. Next: kubectl apply -f projects/ && kubectl apply -f bootstrap/root-app.yaml"
 }
