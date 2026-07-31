@@ -4,6 +4,7 @@ metadata:
   name: tenant-deny-cluster-admin-binding
   annotations:
     argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   enforcementAction: deny
   match:

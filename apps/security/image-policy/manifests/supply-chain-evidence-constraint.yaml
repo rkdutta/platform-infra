@@ -8,6 +8,7 @@ metadata:
   name: tenant-supply-chain-evidence
   annotations:
     argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   enforcementAction: dryrun
   match:
