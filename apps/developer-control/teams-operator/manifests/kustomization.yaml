@@ -45,7 +45,7 @@ configMapGenerator:
   - name: teams-operator-openbao-policy-templates
     files:
       - openbao-policy-templates/project-maintainer.hcl
-      - openbao-policy-templates/project-viewer.hcl
+      - openbao-policy-templates/project-owner.hcl
   - name: teams-operator-openbao-role-templates
     files:
       - openbao-role-templates/project-maintainer.json
