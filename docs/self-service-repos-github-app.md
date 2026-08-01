@@ -12,10 +12,20 @@ It builds on, and should be read alongside:
 - `docs/openbao-spiffe-access.md` — the SPIFFE/SPIRE → OpenBao workload path.
 - `bootstrap/README.md` — the canonical bootstrap/ops runbook.
 
+> **Update (2026-08-01): asks #1 and #2 below were reversed.** Source repos are
+> now **optional at project creation** (a project can start empty; its card
+> highlights that a repo must be registered before it can deploy, and the
+> Source-repos section auto-expands when empty). The **global repository
+> whitelist was removed entirely** (the `global_source_repos` table, the
+> `/source-repos/global` endpoints, the `target=global` GitHub flow, and the
+> create-form repo picker are all gone). Repos are added per-project only, via
+> the GitHub connection flow. The multi-connection section at the bottom is the
+> current design of record for how repos get connected.
+
 ## The five asks
 
-1. **Repo URLs are mandatory at project creation** (today only a name is taken).
-2. **Admins curate a global repo whitelist** available to every project.
+1. ~~**Repo URLs are mandatory at project creation**~~ — reversed: optional (see above).
+2. ~~**Admins curate a global repo whitelist**~~ — removed (see above).
 3. **Project-managers may add ad-hoc repo refs** at creation if they need one
    that isn't whitelisted.
 4. **Private-repo access for Argo CD is self-service via a GitHub App** — the PM
