@@ -1,0 +1,75 @@
+# Governance guardrail: an Argo CD AppProject may only be created or modified by
+# teams-operator (which reconciles it from teams-api's authorized state). No one
+# else — not a tenant, not a project manager, not a cluster-admin with kubectl,
+# not the Argo CD UI/API — may write an AppProject directly.
+#
+# Why this matters: an AppProject's spec.sourceRepos is what allows a repo to be
+# deployed. If anyone could apply an AppProject (or edit one), they could add a
+# repo to sourceRepos WITHOUT it having gone through the GitHub App authorization
+# flow (connect -> the project manager authorizes the App on the repo -> teams-api
+# records it -> the operator puts it in sourceRepos). This constraint forces every
+# AppProject through that single governed path, so "what's allowed to deploy" can
+# never diverge from "what was actually authorized".
+#
+# Enforced on CREATE and UPDATE (Gatekeeper's admission webhook operations). DELETE
+# is not blocked — removing an AppProject just drops a project's guardrail, and the
+# operator recreates it on its next reconcile. The `default` AppProject that ships
+# with Argo CD is exempt by name so its install/management isn't blocked.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srestrictappprojectwrites
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRestrictAppProjectWrites
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedUsers:
+              description: Admission usernames permitted to write AppProjects (the teams-operator SA).
+              type: array
+              items:
+                type: string
+            allowedGroups:
+              description: >-
+                Admission groups permitted to write AppProjects — the break-glass
+                identity (system:masters, i.e. the raw cluster-admin kubeconfig),
+                which is also what applies the platform's plane AppProjects at
+                bootstrap. Platform/OIDC admins are NOT in this group; they go
+                through teams-api like everyone else.
+              type: array
+              items:
+                type: string
+            exemptNames:
+              description: AppProject names exempt from the check (e.g. Argo CD's built-in "default").
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srestrictappprojectwrites
+
+        violation[{"msg": msg}] {
+          not is_allowed_user
+          not is_allowed_group
+          not is_exempt_name
+          msg := sprintf("AppProject %q may only be managed by teams-operator via teams-api; direct creation/modification is blocked so source repos stay governed by the GitHub App authorization flow. Break-glass: apply with the cluster-admin (system:masters) kubeconfig. (requesting user: %q)", [input.review.object.metadata.name, input.review.userInfo.username])
+        }
+
+        is_allowed_user {
+          input.review.userInfo.username == input.parameters.allowedUsers[_]
+        }
+
+        is_allowed_group {
+          input.review.userInfo.groups[_] == input.parameters.allowedGroups[_]
+        }
+
+        is_exempt_name {
+          input.review.object.metadata.name == input.parameters.exemptNames[_]
+        }

@@ -1,0 +1,55 @@
+# Governance guardrail (companion to restrict-appproject-writes): an Argo CD
+# Application must belong to a real, governed AppProject — never the built-in
+# "default" project (which allows sourceRepos '*' and any destination). Combined
+# with the AppProject write restriction, this is what forces every deployment
+# through a project whose source repos were authorized via the GitHub App flow:
+# you can't sneak a repo in by pointing an Application at the permissive default
+# project instead.
+#
+# Enforced on CREATE and UPDATE. The break-glass cluster-admin (system:masters)
+# is allowed — that's who applies the root app-of-apps (bootstrap/root-app.yaml),
+# the one platform Application that legitimately uses project "default". Every
+# other platform Application already targets its plane project (security,
+# resource, ...); tenant Applications target their own project.
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireapplicationproject
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireApplicationProject
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            deniedProjects:
+              description: Project names an Application may not use (e.g. "default", "").
+              type: array
+              items:
+                type: string
+            allowedGroups:
+              description: Admission groups exempt (break-glass system:masters, which applies the root app).
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireapplicationproject
+
+        # spec.project defaults to "default" when unset.
+        project := object.get(input.review.object.spec, "project", "default")
+
+        violation[{"msg": msg}] {
+          not is_allowed_group
+          project == input.parameters.deniedProjects[_]
+          msg := sprintf("Application %q must belong to a governed AppProject, not %q. Deploying via a real project is how source-repo authorization is enforced.", [input.review.object.metadata.name, project])
+        }
+
+        is_allowed_group {
+          input.review.userInfo.groups[_] == input.parameters.allowedGroups[_]
+        }

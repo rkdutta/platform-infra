@@ -52,24 +52,34 @@ Argo CD natively supports GitHub App repo creds via the `githubAppID`,
 `githubAppInstallationID`, and `githubAppPrivateKey` fields on a `repository` /
 `repo-creds` Secret. Public repos need no auth at all.
 
-### The GitHub App flow end to end
+### The GitHub App flow end to end (Option B: teams-api never holds the App key)
+
+The user picks the repos on GitHub; the *selection* is the input (no typing, no
+dropdown). teams-api has no App key, so it can't enumerate the picked repos —
+teams-operator (which holds the key) resolves them and reports them back.
 
 ```
-PM in teams-app                teams-api                 GitHub                 teams-operator / Argo CD
-  |  "Connect <repo>"            |                          |                          |
-  |----- GET /github/install-url ->|                        |                          |
-  |<---- install URL + signed state|                        |                          |
-  |------------------ browser redirect --------------------->|                         |
-  |                              |     user authorizes/installs on the repo/org        |
-  |<----------- redirect to GET /github/callback?installation_id&state ---------------|
-  |                              |-- validate state, record installation_id (metadata) |
-  |                              |     against the project + repo (SQLite; NOT a secret)|
-  |                              |                          |                          |
-  |                              |   (operator poll)        |   materialize githubApp  |
-  |                              |                          |   repo-creds in argocd ns |
-  |                              |                          |   using App id+install id |
-  |                              |                          |   + App key from kv/platform
-  |                              |                          |   Argo CD mints ~1h tokens|
+user in teams-app          teams-api                 GitHub              teams-operator (holds App key) / Argo CD
+  | "+ Add repos from GitHub"  |                        |                          |
+  |-- GET /github/install-url --|  (target=project|global)                         |
+  |    ?target=<id>            -|                        |                          |
+  |<-- install URL + signed state                       |                          |
+  |------------------- browser redirect ---------------->|                         |
+  |                            |    user PICKS repositories on GitHub               |
+  |<--- redirect GET /github/callback?installation_id&state ------------------------|
+  |                            |- verify state, record PENDING (target,install_id)  |
+  |                            |  (store.github_connections; NO enumeration here)   |
+  |                            |                        |                          |
+  |                            |<-- GET /internal/github-connections --------------|  (operator poll: top of reconcile)
+  |                            |                        |<- App JWT -> inst token ->|
+  |                            |                        |   /installation/repositories
+  |                            |<-- POST /internal/github-connections/resolve ------|  (repos + install_id)
+  |                            |-- add repos (source_repos+install_id | whitelist), |
+  |                            |   clear pending                                    |
+  |                            |                        |   reconcile_github_repo_creds:
+  |                            |                        |   ONE repo-creds per account
+  |                            |                        |   (App id+install+key from kv/platform)
+  |                            |                        |   -> Argo CD mints ~1h tokens natively
 ```
 
 One-time platform setup (bootstrap): register the GitHub App (`Contents: read`,

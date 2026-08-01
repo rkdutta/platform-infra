@@ -1,0 +1,30 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRestrictAppProjectWrites
+metadata:
+  name: restrict-appproject-writes
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["argoproj.io"]
+        kinds: ["AppProject"]
+    # AppProjects live in the Argo CD namespace; scope the check there.
+    namespaces:
+      - argocd
+  parameters:
+    # teams-operator's ServiceAccount reconciles tenant-project AppProjects.
+    allowedUsers:
+      - system:serviceaccount:engineering-platform:teams-operator
+    # Break-glass + bootstrap: the raw cluster-admin kubeconfig (system:masters)
+    # is what applies the platform's plane AppProjects (kubectl apply -f
+    # bootstrap/projects/) and is the only sanctioned direct-write path. Platform
+    # OIDC admins are NOT in this group — they use teams-api. Everyone else —
+    # tenants, project managers, the Argo CD UI/API — is denied.
+    allowedGroups:
+      - system:masters
+    # Argo CD's built-in project, created by its own install — not operator-managed.
+    exemptNames:
+      - default
