@@ -121,3 +121,37 @@ subjects:
 - kind: ServiceAccount
   name: teams-operator
   namespace: engineering-platform
+---
+# Argo CD githubApp `repo-creds` secrets, for the self-service connected-repos
+# feature (see reconcile_github_repo_creds / _delete_repo_secret in
+# teams_operator.py; docs/self-service-repos-github-app.md). The operator
+# materializes one repo-creds Secret per (account-prefix, installation) in the
+# argocd namespace and label-prunes the stale ones, so beyond the cluster-wide
+# `create` above it also needs list/get/update/delete here. Deliberately a
+# namespaced Role (not extra verbs on the ClusterRole): `list`/`get` on secrets
+# can't be scoped by resourceName or label selector, so cluster-wide they'd let
+# this ServiceAccount read every secret in the cluster. Confining them to the
+# argocd namespace keeps the blast radius to Argo CD's own repo credentials.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: teams-operator-repo-creds
+  namespace: argocd
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: teams-operator-repo-creds
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: teams-operator-repo-creds
+subjects:
+- kind: ServiceAccount
+  name: teams-operator
+  namespace: engineering-platform
