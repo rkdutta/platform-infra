@@ -1,0 +1,43 @@
+# teams-operator RBAC that must live in the `argocd` namespace — kept OUT of
+# manifests/ deliberately. That directory is a Kustomize source with a
+# top-level `namespace: engineering-platform`, whose namespace transformer
+# rewrites every namespaced resource (a Role/RoleBinding declared with
+# `namespace: argocd` there would be forced back to engineering-platform and
+# grant nothing in argocd). These are applied as plain manifests by their own
+# Application (../argocd-rbac-application.yaml), so `namespace: argocd` stands.
+#
+# Purpose: the self-service connected-repos feature. The operator materializes
+# one Argo CD githubApp `repo-creds` Secret per (account-prefix, installation)
+# in the argocd namespace and label-prunes the stale ones — see
+# reconcile_github_repo_creds / _delete_repo_secret in teams_operator.py and
+# docs/self-service-repos-github-app.md. Beyond the cluster-wide `create` the
+# operator's ClusterRole already grants (for tenant harbor-pull secrets), that
+# reconcile needs list/get/update/delete on secrets in argocd.
+#
+# Deliberately a namespaced Role rather than extra verbs on the ClusterRole:
+# `list`/`get` on secrets can't be scoped by resourceName or label selector, so
+# granting them cluster-wide would let this ServiceAccount read every Secret in
+# the cluster. A Role confines the blast radius to Argo CD's own repo creds.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: teams-operator-repo-creds
+  namespace: argocd
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: teams-operator-repo-creds
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: teams-operator-repo-creds
+subjects:
+- kind: ServiceAccount
+  name: teams-operator
+  namespace: engineering-platform

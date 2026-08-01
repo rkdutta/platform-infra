@@ -1,0 +1,40 @@
+# Companion Application to teams-operator: the operator's argocd-namespace RBAC
+# (Role/RoleBinding for githubApp repo-creds Secrets — see argocd-rbac/). Split
+# into its own Application because the operator's own manifests/ is a Kustomize
+# source pinned to `namespace: engineering-platform`, which can't emit an
+# argocd-namespaced resource. This one renders argocd-rbac/ as plain manifests
+# (no Kustomize, no namespace transform) so `namespace: argocd` is honoured.
+#
+# Picked up by the root app-of-apps via the `**/*-application.yaml` include glob
+# (see bootstrap/root-app.yaml). Wave 2: land before the operator (wave 3) so
+# its first reconcile of repo-creds already has the permission.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: teams-operator-argocd-rbac
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    plane: developer-control
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: developer-control
+  source:
+    repoURL: https://github.com/rkdutta/platform-infra.git
+    targetRevision: main
+    path: apps/developer-control/teams-operator/argocd-rbac
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
