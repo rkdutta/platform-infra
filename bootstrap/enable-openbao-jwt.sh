@@ -118,6 +118,18 @@ path "kv/data/platform/*" {
 path "kv/metadata/platform/*" {
   capabilities = ["read", "list"]
 }
+# Per-project GitHub App "connections" (the self-service multi-connection flow,
+# see docs/self-service-repos-github-app.md): the operator CREATES these entries,
+# writing each newly-registered App's private key after converting the GitHub
+# App-Manifest code (resolve_github_registrations / _store_connection_app_key).
+# A more-specific path wins over the read-only kv/data/platform/* glob above, so
+# write is scoped to exactly the github-apps subtree — not all of platform/*.
+path "kv/data/platform/github-apps/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+path "kv/metadata/platform/github-apps/*" {
+  capabilities = ["read", "list", "delete"]
+}
 EOF
 
 log "writing auth/jwt/role/teams-operator-admin"

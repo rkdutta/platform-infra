@@ -247,3 +247,92 @@ Today `openbao-admin-policy` is `path "*"` (superuser) bound to the
 
 Everything else (existing source-repo CRUD, k8s/Argo RBAC, namespace flows) is
 additive.
+
+## Multi-connection: per-project GitHub Apps (extension, 2026-08-01)
+
+The base design above assumes a **single** platform GitHub App (`kv/platform/
+github-app`, one `GITHUB_APP_SLUG`). This extension lets a project connect repos
+through **its own GitHub App**, chosen from a picker, and lets a project owner /
+manager **register a new App** without anyone handling a key.
+
+**Decisions (locked):** connections are **per-project** (a connection belongs to
+the project that registered it); a **project owner/PM** may register one; the
+registration mechanism is GitHub's **App-Manifest creation flow** (GitHub returns
+the key programmatically). The single platform App is retained only for the
+**global whitelist** (`target=global`, admin).
+
+### Concept
+
+A **connection** = a registered GitHub App. `github_app_connections` (teams-api
+DB, per-project) holds non-secret metadata `{id, project_id, name, slug, app_id,
+status, created_by}`; the App **private key** lives in OpenBao at
+`kv/platform/github-apps/<connection-id>`. `project_source_repos` gains
+`connection_id` (which App minted a connected repo's installation; `''` = the
+legacy platform App).
+
+### Registration flow (teams-api never holds the key)
+
+```
+PM in teams-app         teams-api                      GitHub                 teams-operator (holds vault write)
+ | "Register new connection" |                            |                            |
+ |-- GET /github/register-url?project_id -|               |                            |
+ |<-- {action_url, manifest, connection_id}  (row: pending)|                           |
+ |--- auto-POST form: settings/apps/new?state -----------> | user picks account, Creates App
+ |<-- redirect GET /github/manifest-callback?code&state ---|                           |
+ |    verify state -> record registration(code)            |                           |
+ |                            |<-- GET /internal/github-registrations --------------- |  (operator poll)
+ |                            |                            |<- POST /app-manifests/{code}/conversions
+ |                            |                            |   -> {id, slug, name, pem}|
+ |                            |                            |   write pem -> OpenBao kv/platform/github-apps/<id>
+ |                            |<-- POST /internal/github-registrations/resolve ------- |  {app_id, slug, name}
+ |                            |    connection -> 'ready'   |                           |
+```
+
+The one-time manifest `code` (the conversion response carries the private key) is
+exchanged **by the operator**, the component that owns OpenBao writes — teams-api
+only ever holds the `code`, never the key, preserving the base design's Option-B
+invariant. The manifest pins least privilege (`Contents: read`, `Metadata: read`).
+
+Adding repos then reuses the existing install flow, now per connection:
+`GET /github/install-url?target=<project>&connection_id=<id>` → that connection's
+App install page → `/github/callback` records `(target, installation_id,
+connection_id)` → operator resolves repos with **that connection's** key.
+
+### Credential materialization — per-repo, to avoid prefix collisions
+
+Argo CD matches `repo-creds` templates by **longest URL prefix**. With per-project
+connections, two projects can each register an App reaching the same GitHub
+account, producing two templates claiming the same prefix — Argo CD can't tell
+which App's token to mint. So connection-bound repos get **per-repo `repository`
+Secrets** (exact-URL match beats any prefix template), one per connected repo,
+carrying that connection's `githubAppID`/key
+(`ensure_connection_repo_credentials`, label `teams-operator/github-conn-repo`).
+The legacy account-level `repo-creds` path (`reconcile_github_repo_creds`) is kept
+only for connection-less repos + the global whitelist (the platform App).
+
+### Component surface
+
+- **teams-api**: `github_app_connections` + `github_app_registrations` tables;
+  `GET /projects/{id}/github/connections`, `GET /github/register-url`,
+  `GET /github/manifest-callback` (public), `GET /github/install-url` gains
+  `connection_id`; internal `GET /internal/github-registrations` +
+  `/resolve`; `/internal/github-connections(/resolve)` and `/internal/teams`
+  carry `connection_id` + per-project `github_connections`. New env
+  `TEAMS_API_PUBLIC_URL` (manifest redirect target).
+- **teams-operator**: `resolve_github_registrations` (+ `_exchange_manifest_code`,
+  `_store_connection_app_key`); `_github_app_creds(connection_id)`;
+  `ensure_connection_repo_credentials`.
+- **teams-app**: "Add repos from GitHub" opens a connection **picker** (choose a
+  ready connection, or "Register new connection" → auto-submitting manifest form).
+- **OpenBao**: `platform-operator-policy` gains create/update on
+  `kv/data/platform/github-apps/*` (scoped tighter than the read-only
+  `platform/*` glob) — see `bootstrap/enable-openbao-jwt.sh`.
+
+### Known follow-ups
+
+- **Orphaned connection keys**: deleting a project cascades its
+  `github_app_connections` rows (DB) but leaves the App key at
+  `kv/platform/github-apps/<id>` in OpenBao — a teardown step should prune it
+  (the operator now holds delete on that subtree).
+- **Global whitelist** still uses the single platform App; unifying it onto the
+  connection model is deferred.

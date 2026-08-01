@@ -137,6 +137,12 @@ spec:
           value: "rkdutta-engineering-platform"
         - name: TEAMS_APP_URL
           value: "https://teams-ui.127.0.0.1.sslip.io:8443"
+        # teams-api's OWN external host — where GitHub redirects the App-Manifest
+        # registration flow back to (/github/manifest-callback) for per-project
+        # connections. Matches the platform App's Setup URL host used by
+        # /github/callback (docs/self-service-repos-github-app.md).
+        - name: TEAMS_API_PUBLIC_URL
+          value: "https://teams-api.127.0.0.1.sslip.io:8443"
         - name: GITHUB_APP_STATE_SECRET
           valueFrom:
             secretKeyRef:

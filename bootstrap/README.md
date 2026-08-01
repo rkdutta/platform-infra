@@ -225,6 +225,16 @@ path "kv/data/platform/*" {
 path "kv/metadata/platform/*" {
   capabilities = ["read", "list"]
 }
+# Per-project GitHub App "connections" (multi-connection self-service; see
+# docs/self-service-repos-github-app.md): the operator writes each newly-created
+# App's key here after converting the GitHub App-Manifest code. Scoped to just
+# the github-apps subtree (more specific than the read-only platform/* glob).
+path "kv/data/platform/github-apps/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+path "kv/metadata/platform/github-apps/*" {
+  capabilities = ["read", "list", "delete"]
+}
 EOF
 
 # `bound_claims` is a map field — the CLI's `key=value` shorthand doesn't
