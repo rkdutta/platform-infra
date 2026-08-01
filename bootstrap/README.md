@@ -208,6 +208,25 @@ path "kv/metadata/project-*" {
 }
 EOF
 
+# platform-operator-policy: the operator's READ access to the platform-
+# management layer (kv/platform/*), notably kv/platform/github-app/ where the
+# GitHub App id + private key live (see docs/self-service-repos-github-app.md;
+# read by _github_app_creds in teams_operator.py for the self-service
+# connected-repos feature). A SEPARATE policy from teams-operator-admin-policy
+# on purpose: its name is outside the operator's own "project-*" self-
+# management glob, so the operator can never widen its own platform access.
+# Omitting this (or leaving it off the role's token_policies below) makes the
+# operator 403 on kv/data/platform/github-app — repo-creds never materialize.
+kubectl -n openbao exec -i openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao policy write platform-operator-policy -" <<'EOF'
+path "kv/data/platform/*" {
+  capabilities = ["read", "list"]
+}
+path "kv/metadata/platform/*" {
+  capabilities = ["read", "list"]
+}
+EOF
+
 # `bound_claims` is a map field — the CLI's `key=value` shorthand doesn't
 # parse a nested map correctly (fails with "expected type
 # 'map[string]interface {}', got unconvertible type 'string'"), confirmed
@@ -223,7 +242,7 @@ kubectl -n openbao exec -i openbao-0 -- sh -c \
   "bound_claims": {
     "sub": "spiffe://platform.local/ns/engineering-platform/sa/teams-operator"
   },
-  "token_policies": ["teams-operator-admin-policy"],
+  "token_policies": ["teams-operator-admin-policy", "platform-operator-policy"],
   "token_ttl": "15m",
   "token_max_ttl": "1h"
 }
