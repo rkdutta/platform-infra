@@ -99,19 +99,65 @@ EOF
 
   log "OpenBao OIDC login ready — https://openbao.127.0.0.1.sslip.io:8443/ui/ (OIDC button) or 'bao login -method=oidc'"
 
-  # Vault/OpenBao won't mint a token carrying the literal built-in "root"
-  # policy through any auth method (by design — only `bao operator init` /
-  # `generate-root` can produce a real root token). This is the standard
-  # equivalent: a policy granting every capability on every path, bound via
-  # an external identity group to the same "argocd-admins" Keycloak group
-  # Argo CD and Harbor already treat as "the platform admins" — so anyone
-  # in that group (just "admin" today) gets it automatically on OIDC login,
-  # no separate OpenBao-specific admin list to maintain.
-  log "OpenBao: writing openbao-admin-policy (superuser-equivalent)"
+  # Root and admin are DELIBERATELY split (see
+  # docs/self-service-repos-github-app.md). "root" is the unseal-derived token
+  # in bootstrap/init-keys.json — break-glass only, never bound to an OIDC
+  # group. "admin" (the argocd-admins Keycloak group Argo CD/Harbor already
+  # treat as platform admins) is an OPERATOR of OpenBao, not a superuser: it may
+  # manage mounts / auth methods / identity, and read kv METADATA everywhere,
+  # but it may NOT write ACL policies and may NOT read kv secret DATA. Policy
+  # authorship belongs solely to teams-operator (rendered from git-reviewed
+  # templates); tenant secret values are never readable by a human admin.
+  #
+  # Honest residual (accepted): with identity/auth/mount write an admin can
+  # still attach an EXISTING data-granting policy to themselves. This stops
+  # casual reads and stops inventing new access, not a determined operator — and
+  # every action is in the OpenBao audit log. See the design doc's "residuals".
+  log "OpenBao: writing openbao-admin-policy (operator, not superuser)"
   kubectl -n openbao exec -i openbao-0 -- sh -c \
     "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$bao_token bao policy write openbao-admin-policy -" <<'EOF'
-path "*" {
-  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+# Manage secret mounts and auth methods (enable/tune/list).
+path "sys/mounts" {
+  capabilities = ["read", "list"]
+}
+path "sys/mounts/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "sys/auth" {
+  capabilities = ["read", "list"]
+}
+path "sys/auth/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+# Manage identity (entities, groups, aliases) and tune auth roles.
+path "identity/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "auth/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+# Read ACL policies (to inspect/audit), but NOT write them.
+path "sys/policies/acl" {
+  capabilities = ["read", "list"]
+}
+path "sys/policies/acl/*" {
+  capabilities = ["read"]
+}
+
+# See WHAT secrets exist and their versions (metadata) everywhere, but never
+# read the secret DATA.
+path "kv/metadata/*" {
+  capabilities = ["read", "list"]
+}
+
+# Operational visibility.
+path "sys/health" {
+  capabilities = ["read"]
+}
+path "sys/capabilities-self" {
+  capabilities = ["create", "update"]
 }
 EOF
 

@@ -99,8 +99,24 @@ path "identity/group-alias" {
 path "sys/auth" {
   capabilities = ["read"]
 }
-path "kv/metadata/project-*" {
+path "kv/metadata/projects/*" {
   capabilities = ["read", "list", "delete"]
+}
+EOF
+
+# platform-operator-policy: the operator's READ access to the platform-management
+# layer (kv/platform/*), notably kv/platform/github-app/ where the GitHub App
+# private key lives (see docs/self-service-repos-github-app.md). Created here by
+# root, NOT rendered by the operator — its name is outside the operator's own
+# "project-*" self-management glob on purpose, so the operator can never widen
+# its own platform access.
+log "writing platform-operator-policy (operator read of kv/platform/*)"
+bao 'bao policy write platform-operator-policy -' <<'EOF'
+path "kv/data/platform/*" {
+  capabilities = ["read", "list"]
+}
+path "kv/metadata/platform/*" {
+  capabilities = ["read", "list"]
 }
 EOF
 
@@ -114,7 +130,7 @@ bao 'bao write auth/jwt/role/teams-operator-admin -' <<EOF
   "bound_claims": {
     "sub": "$OPERATOR_SPIFFE_ID"
   },
-  "token_policies": ["teams-operator-admin-policy"],
+  "token_policies": ["teams-operator-admin-policy", "platform-operator-policy"],
   "token_ttl": "15m",
   "token_max_ttl": "1h"
 }

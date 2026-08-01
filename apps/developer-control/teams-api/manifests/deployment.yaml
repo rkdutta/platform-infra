@@ -127,6 +127,22 @@ spec:
               name: platform-tls
               key: tls.crt
               optional: true
+        # --- GitHub App self-service repo connection -------------------------
+        # See docs/self-service-repos-github-app.md. GITHUB_APP_SLUG is the App's
+        # URL slug (github.com/apps/<slug>). GITHUB_APP_STATE_SECRET signs the
+        # OAuth `state`; TEAMS_APP_URL is where the callback bounces the browser
+        # back to (the UI host). The App id + private key are NOT here — they live
+        # in OpenBao (kv/platform/github-app), read only by teams-operator.
+        - name: GITHUB_APP_SLUG
+          value: "rkdutta-engineering-platform"
+        - name: TEAMS_APP_URL
+          value: "https://teams-ui.127.0.0.1.sslip.io:8443"
+        - name: GITHUB_APP_STATE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: teams-api-github-app
+              key: state-secret
+              optional: true
         volumeMounts:
         - name: data
           mountPath: /data
