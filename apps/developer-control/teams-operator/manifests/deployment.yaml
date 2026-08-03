@@ -115,7 +115,10 @@ spec:
         # `teams-operator-kc-admin` (apps/security/keycloak); its secret must be
         # seeded at kv/platform/keycloak-admin (see bootstrap/README.md).
         - name: KC_RECONCILE_ENABLED
-          value: "false"
+          # FLIP #1: operator now writes Keycloak (groups + project-manager role).
+          # teams-api still writes too until flip #2 (KC_WRITES_ENABLED=false) —
+          # dual-write is idempotent/safe. Rollback: set back to "false".
+          value: "true"
         - name: KEYCLOAK_ADMIN_BASE_URL
           value: "http://keycloak-keycloakx-http.keycloak.svc/auth"
         - name: KEYCLOAK_REALM

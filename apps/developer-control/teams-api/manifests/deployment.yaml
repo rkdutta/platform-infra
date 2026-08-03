@@ -83,6 +83,12 @@ spec:
           value: "teams"
         - name: KC_ADMIN_CLIENT_ID
           value: "teams-api-sa"
+        # Cutover knob. "true" = teams-api still WRITES Keycloak (current). At
+        # FLIP #2 — only after flip #1 (operator KC_RECONCILE_ENABLED=true) is
+        # verified — set this to "false" so teams-operator becomes the sole
+        # writer. READS (user lookup / picker) stay on regardless. Rollback: "true".
+        - name: KC_WRITES_ENABLED
+          value: "true"
         - name: KC_ADMIN_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
