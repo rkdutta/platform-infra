@@ -51,7 +51,12 @@ configMapGenerator:
       - openbao-role-templates/project-maintainer.json
   - name: teams-operator-openbao-agentconfig-templates
     files:
+      # spiffe-helper.conf: the per-tenant template the operator copies into each
+      # tenant namespace (openbao-audience only). operator-spiffe-helper.conf: the
+      # operator's OWN sidecar config, which also emits a teams-api-audience SVID
+      # for /internal auth (A1). agent.hcl: the openbao-agent proxy template.
       - openbao-agentconfig-templates/spiffe-helper.conf
+      - openbao-agentconfig-templates/operator-spiffe-helper.conf
       - openbao-agentconfig-templates/agent.hcl
 
 generatorOptions:

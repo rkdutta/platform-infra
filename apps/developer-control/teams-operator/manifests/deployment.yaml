@@ -74,6 +74,16 @@ spec:
             secretKeyRef:
               name: teams-operator-keycloak-secret
               key: client-secret
+        # --- A1: how the operator authenticates to teams-api /internal/* ------
+        # "keycloak" (default) = the OPERATOR_CLIENT_SECRET token above.
+        # "svid" = present this pod's teams-api-audience JWT-SVID (written by the
+        # spiffe-helper sidecar to TEAMS_API_SVID_PATH) — no Keycloak, no static
+        # secret. Flip to "svid" together with teams-api's INTERNAL_AUTH_MODE=svid;
+        # then OPERATOR_CLIENT_SECRET + the teams-operator-sa client can be retired.
+        - name: TEAMS_API_AUTH
+          value: "keycloak"
+        - name: TEAMS_API_SVID_PATH
+          value: "/operator-shared/teams-api-jwt"
         # Argo CD Project self-service reconciliation (see
         # ensure_argocd_appproject / ensure_argocd_rbac_policy in
         # teams_operator.py). Must match var.argocd_namespace's default in
@@ -202,7 +212,11 @@ spec:
       # bodies, not just proxy KV reads/writes.
       - name: spiffe-helper
         image: harbor.127.0.0.1.sslip.io/platform/spiffe-helper:0.9.1
-        args: ["-config", "/app/openbao-agentconfig-templates/spiffe-helper.conf"]
+        # operator-spiffe-helper.conf (NOT the tenant spiffe-helper.conf): emits
+        # this pod's JWT-SVIDs for BOTH audiences — "openbao" (-> /shared/spiffe-jwt,
+        # for OpenBao login) and "teams-api" (-> /shared/teams-api-jwt, for A1
+        # /internal auth). Only the operator gets the teams-api one.
+        args: ["-config", "/app/openbao-agentconfig-templates/operator-spiffe-helper.conf"]
         volumeMounts:
           - name: spiffe-workload-api
             mountPath: /spiffe-workload-api

@@ -91,6 +91,21 @@ spec:
         # stay on regardless. Rollback to dual-write: set back to "true".
         - name: KC_WRITES_ENABLED
           value: "false"
+        # --- A1: how /internal/* authenticates teams-operator -----------------
+        # "keycloak" (default) validates the teams-operator-sa Keycloak token
+        # (azp check). "svid" validates teams-operator's SPIRE JWT-SVID against
+        # SPIRE's JWKS (issuer/audience/exact SPIFFE ID), over TLS trusting
+        # platform-tls (reused from KEYCLOAK_CA_CERT below). The USER token path
+        # is unchanged in both modes. Flip to "svid" together with the operator's
+        # TEAMS_API_AUTH=svid.
+        - name: INTERNAL_AUTH_MODE
+          value: "keycloak"
+        - name: SPIRE_JWKS_URL
+          value: "https://spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local/keys"
+        - name: SPIRE_ISSUER
+          value: "https://spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local"
+        - name: OPERATOR_SPIFFE_ID
+          value: "spiffe://platform.local/ns/engineering-platform/sa/teams-operator"
         - name: KC_ADMIN_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
