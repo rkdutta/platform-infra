@@ -11,6 +11,13 @@
 # the one platform Application that legitimately uses project "default". Every
 # other platform Application already targets its plane project (security,
 # resource, ...); tenant Applications target their own project.
+#
+# `exemptNames` additionally exempts named Applications regardless of who is
+# updating them. This is REQUIRED for root: the system:masters allowance only
+# covers the human bootstrap apply, not Argo's own application-controller when it
+# refreshes/reconciles root afterward (its SA is not system:masters). Without the
+# name exemption the controller's updates to root are denied and root freezes,
+# stalling every app-of-apps manifest change (learned the hard way).
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -36,6 +43,11 @@ spec:
               type: array
               items:
                 type: string
+            exemptNames:
+              description: Application names exempt by name — the root app-of-apps legitimately uses project "default" and must stay reconcilable by the Argo controller (whose SA is not system:masters).
+              type: array
+              items:
+                type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
@@ -46,10 +58,18 @@ spec:
 
         violation[{"msg": msg}] {
           not is_allowed_group
+          not is_exempt_name
           project == input.parameters.deniedProjects[_]
           msg := sprintf("Application %q must belong to a governed AppProject, not %q. Deploying via a real project is how source-repo authorization is enforced.", [input.review.object.metadata.name, project])
         }
 
         is_allowed_group {
           input.review.userInfo.groups[_] == input.parameters.allowedGroups[_]
+        }
+
+        # Exempt specific Applications by name (e.g. the root app-of-apps, which
+        # legitimately uses project "default"). object.get keeps this safe when
+        # exemptNames is unset.
+        is_exempt_name {
+          input.review.object.metadata.name == object.get(input.parameters, "exemptNames", [])[_]
         }

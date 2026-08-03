@@ -24,3 +24,9 @@ spec:
     # uses project "default".
     allowedGroups:
       - system:masters
+    # Exempt root by name so Argo's application-controller (not system:masters)
+    # can keep refreshing/reconciling it — otherwise root freezes and no
+    # app-of-apps manifest change propagates. root is the ONE Application allowed
+    # in project "default"; everything else must use a governed project.
+    exemptNames:
+      - root
