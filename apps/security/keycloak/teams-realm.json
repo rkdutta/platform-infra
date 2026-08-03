@@ -323,7 +323,7 @@
       "enabled": true,
       "serviceAccountClientId": "teams-api-sa",
       "clientRoles": {
-        "realm-management": ["manage-users", "view-users", "query-users", "query-groups", "manage-realm"]
+        "realm-management": ["view-realm", "view-users", "query-users", "query-groups"]
       }
     },
     {

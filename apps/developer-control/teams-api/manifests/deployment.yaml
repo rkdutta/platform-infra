@@ -72,11 +72,13 @@ spec:
           value: "https://platform-auth.127.0.0.1.sslip.io:8443/auth/realms/teams"
         - name: OIDC_JWKS_URL
           value: "http://keycloak-keycloakx-http.keycloak.svc/auth/realms/teams/protocol/openid-connect/certs"
-        # --- Keycloak Admin API (namespace access management) ----------------
-        # teams-api manages the realm's groups/memberships (assign a user to a
-        # namespace = add them to its Keycloak group) via the confidential
-        # `teams-api-sa` client. If the secret is absent the access-management
-        # features degrade (the env ref is optional), but the API still starts.
+        # --- Keycloak directory READS (assignment picker / user validation) --
+        # teams-api READS the realm (list users, resolve a user, read group/role
+        # membership) via the confidential `teams-api-sa` client — now scoped to
+        # READ-ONLY roles (view-users/query-users/query-groups). It no longer
+        # WRITES Keycloak: teams-operator is the sole writer (reconcile_keycloak).
+        # If the secret is absent the picker/validation degrade (env ref
+        # optional), but the API still starts.
         - name: KEYCLOAK_BASE_URL
           value: "http://keycloak-keycloakx-http.keycloak.svc/auth"
         - name: KEYCLOAK_REALM
