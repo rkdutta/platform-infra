@@ -237,6 +237,17 @@ path "kv/metadata/platform/github-apps/*" {
 }
 EOF
 
+# Keycloak-admin client secret for teams-operator's realm-write reconcile
+# (reconcile_keycloak in teams_operator.py; gated by KC_RECONCILE_ENABLED, OFF
+# until cutover). The operator reads it at kv/data/platform/keycloak-admin via
+# its SPIFFE identity — already covered by platform-operator-policy above
+# (kv/data/platform/*), so no extra policy is needed. The value MUST equal the
+# `teams-operator-kc-admin` client secret in the realm import
+# (apps/security/keycloak/{application.yaml,teams-realm.json}). Demo value shown;
+# generate a real secret (and set it on both sides) for anything but local demo.
+kubectl -n openbao exec -i openbao-0 -- sh -c \
+  "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao kv put kv/platform/keycloak-admin client-secret=dev-teams-operator-kc-admin-secret-change-me"
+
 # `bound_claims` is a map field — the CLI's `key=value` shorthand doesn't
 # parse a nested map correctly (fails with "expected type
 # 'map[string]interface {}', got unconvertible type 'string'"), confirmed

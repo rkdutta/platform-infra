@@ -49,7 +49,9 @@ spec:
         - name: TEAMS_API_URL
           value: "http://teams-api-service.engineering-platform.svc.cluster.local:8000"
         - name: POLL_INTERVAL
-          value: "30"
+          # 15s (was 30s) so self-service access — RBAC, secrets, and (once
+          # KC_RECONCILE_ENABLED) Keycloak groups/role — lands faster.
+          value: "15"
         # Durable home for Events whose involvedObject namespace is being
         # deleted (see delete_namespace / _emit_event in teams_operator.py)
         # - an Event stored in the namespace it's about to delete would be
@@ -102,6 +104,26 @@ spec:
           value: "/operator-shared/spiffe-jwt"
         - name: OPENBAO_ROLE
           value: "teams-operator-admin"
+        # --- Keycloak realm-write reconcile (GATED OFF until cutover) ---------
+        # When "true", teams-operator becomes the SOLE writer of the Keycloak
+        # k8s-access groups (+ project-<slug>-owner groups + project-manager role)
+        # via reconcile_keycloak. The admin client_secret is read from OpenBao at
+        # KEYCLOAK_ADMIN_OPENBAO_PATH using this pod's SPIFFE identity
+        # (platform-operator-policy already grants read on kv/data/platform/*) —
+        # no static k8s Secret. Flip to "true" only at cutover, together with
+        # disabling teams-api's Keycloak writes. The matching client is
+        # `teams-operator-kc-admin` (apps/security/keycloak); its secret must be
+        # seeded at kv/platform/keycloak-admin (see bootstrap/README.md).
+        - name: KC_RECONCILE_ENABLED
+          value: "false"
+        - name: KEYCLOAK_ADMIN_BASE_URL
+          value: "http://keycloak-keycloakx-http.keycloak.svc/auth"
+        - name: KEYCLOAK_REALM
+          value: "teams"
+        - name: KEYCLOAK_ADMIN_CLIENT_ID
+          value: "teams-operator-kc-admin"
+        - name: KEYCLOAK_ADMIN_OPENBAO_PATH
+          value: "kv/data/platform/keycloak-admin"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
