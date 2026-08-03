@@ -4,15 +4,17 @@
 # teams-operator's own bootstrap policy+role. Replays steps 2-3 of the
 # "OpenBao — one-time init" section of bootstrap/README.md; keep both in sync.
 #
-# Also the intended fix for the recurring caveat the README calls out: SPIRE's
-# root rotates ~daily, so auth/jwt/config's oidc_discovery_ca_pem goes stale and
-# workload JWT logins start failing with a TLS trust error. Re-running this
-# re-extracts the current SPIRE bundle CA and rewrites the config (safe to
-# re-run anytime — the auth-method enable is guarded, everything else is a
-# natural overwrite).
+# auth/jwt/config pins the CA that signs the OIDC discovery provider's HTTPS
+# serving cert. That cert is now issued by cert-manager from the STABLE
+# `platform-tls` CA (see apps/security/spire — tls.certManager), so the pin no
+# longer goes stale. This historically used SPIRE's own trust bundle, whose CA
+# rotated ~daily and repeatedly broke workload JWT logins with a TLS trust error
+# — the reason the provider's serving cert was moved to platform-tls. Safe to
+# re-run anytime (the auth-method enable is guarded, everything else overwrites).
 #
 # Prereqs: OpenBao initialised/unsealed (bootstrap/init-keys.json present),
-# SPIRE server + oidc-discovery-provider running, spire-bundle ConfigMap present.
+# SPIRE server + oidc-discovery-provider running, and the platform-tls secret
+# present in the openbao namespace (bootstrap/create-secrets.sh).
 #
 # Usage: bootstrap/enable-openbao-jwt.sh
 set -euo pipefail
@@ -37,30 +39,16 @@ BAO_TOKEN=$(jq -r '.root_token' bootstrap/init-keys.json)
 
 bao() { kubectl -n openbao exec -i openbao-0 -- sh -c "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN $*"; }
 
-# --- 1. Extract the SPIRE trust-bundle CA (x509-svid entries) as PEM ----------
-# spire-bundle holds a SPIFFE JWKS bundle (JSON), not a ready PEM — OpenBao needs
-# the CA that signs the discovery provider's TLS SVID to validate the HTTPS pull.
-log "extracting SPIRE trust bundle CA from spire-bundle ConfigMap"
-tmp_bundle=$(mktemp)
-trap 'rm -f "$tmp_bundle"' EXIT
-kubectl get cm spire-bundle -n spire-server -o jsonpath='{.data.bundle\.spiffe}' > "$tmp_bundle"
-[[ -s "$tmp_bundle" ]] || die "spire-bundle ConfigMap has no bundle.spiffe key"
-# argv (not stdin): the heredoc below is python's program source, so stdin is taken.
-pem=$(python3 - "$tmp_bundle" <<'PYEOF'
-import json, sys, textwrap
-with open(sys.argv[1]) as f:
-    bundle = json.load(f)
-out = []
-for key in bundle.get("keys", []):
-    if key.get("use") == "x509-svid":
-        for der_b64 in key.get("x5c", []):
-            out.append("-----BEGIN CERTIFICATE-----")
-            out.append("\n".join(textwrap.wrap(der_b64, 64)))
-            out.append("-----END CERTIFICATE-----")
-sys.stdout.write("\n".join(out) + "\n")
-PYEOF
-)
-[[ "$pem" == *"BEGIN CERTIFICATE"* ]] || die "no x509-svid certs found in spire-bundle"
+# --- 1. Extract the STABLE platform-tls CA as PEM -----------------------------
+# OpenBao needs the CA that signs the OIDC discovery provider's HTTPS serving
+# cert to validate the JWKS pull. That serving cert is now issued by cert-manager
+# from the stable `platform-tls` CA (see apps/security/spire — tls.certManager),
+# NOT a SPIRE-issued X.509-SVID. So we pin platform-tls, which never rotates.
+# (Previously this extracted the SPIRE trust bundle, whose CA rotated ~daily and
+# repeatedly staled this pin — the reason this whole change exists.)
+log "extracting stable platform-tls CA from the platform-tls secret"
+pem=$(kubectl -n openbao get secret platform-tls -o jsonpath='{.data.tls\.crt}' | base64 -d)
+[[ "$pem" == *"BEGIN CERTIFICATE"* ]] || die "platform-tls secret (openbao ns) has no tls.crt"
 printf '%s' "$pem" | kubectl -n openbao exec -i openbao-0 -- sh -c 'cat > /tmp/spire-bundle.pem'
 
 # --- 2. Enable the jwt auth method (guarded — errors on a second enable) -------

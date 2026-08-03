@@ -73,6 +73,36 @@ spec:
                   dnsNameTemplates:
                     - "oidc-discovery.{{ .TrustDomain }}"
                     - "spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local"
+        # OIDC discovery provider: serve its HTTPS cert from the STABLE
+        # platform-tls CA (via cert-manager) instead of a SPIRE-issued X.509-SVID.
+        # The SVID chains to SPIRE's ~daily-rotating CA, which repeatedly staled
+        # OpenBao's pinned oidc_discovery_ca_pem and broke workload JWT logins
+        # (see apps/security/cert-manager/manifests/platform-tls-ca-issuer.yaml
+        # and bootstrap/enable-openbao-jwt.sh). cert-manager renews the leaf; the
+        # CA (platform-tls) is constant, so OpenBao's trust never goes stale.
+        # The clusterSPIFFEIDs.oidc-discovery-provider.dnsNameTemplates override
+        # above is now moot (it only fixed the SVID serving cert's SAN) but is
+        # left in place harmlessly — the provider still uses the Workload API to
+        # publish SPIRE's JWKS; only the TLS transport cert changes here.
+        spiffe-oidc-discovery-provider:
+          tls:
+            spire:
+              enabled: false          # stop using the rotating SPIRE serving cert
+            certManager:
+              enabled: true
+              issuer:
+                create: false         # use our stable platform-tls-ca ClusterIssuer
+              certificate:
+                # In-cluster FQDNs the endpoint is reached by (no Ingress, so set
+                # explicitly rather than let the chart derive from ingress.host).
+                dnsNames:
+                  - "spire-spiffe-oidc-discovery-provider"
+                  - "spire-spiffe-oidc-discovery-provider.spire-server"
+                  - "spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local"
+                  - "oidc-discovery.platform.local"
+                issuerRef:
+                  kind: ClusterIssuer
+                  name: platform-tls-ca
   destination:
     server: https://kubernetes.default.svc
     # Chart places resources in spire-server / spire-system explicitly and

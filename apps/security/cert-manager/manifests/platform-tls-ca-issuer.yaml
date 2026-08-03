@@ -1,0 +1,21 @@
+# A CA ClusterIssuer backed by the stable `platform-tls` wildcard CA
+# (CN=*.127.0.0.1.sslip.io, is_ca). Used to issue the SPIRE OIDC discovery
+# provider's HTTPS *serving* cert (see apps/security/spire — tls.certManager).
+#
+# Why: the provider previously served TLS from a SPIRE-issued X.509-SVID, which
+# chains to SPIRE's CA and *rotates ~daily*. OpenBao's `jwt` auth pins that CA
+# (auth/jwt/config.oidc_discovery_ca_pem) to validate the JWKS pull, so every
+# rotation silently broke workload logins until bootstrap/enable-openbao-jwt.sh
+# was re-run. Signing the provider's serving cert from `platform-tls` instead
+# gives OpenBao a STABLE CA to pin once — cert-manager renews the leaf, but the
+# CA never changes.
+#
+# cert-manager resolves `secretName` from its cluster-resource-namespace
+# (cert-manager); bootstrap/create-secrets.sh replicates platform-tls there.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: platform-tls-ca
+spec:
+  ca:
+    secretName: platform-tls
