@@ -81,7 +81,10 @@ spec:
         # secret. Flip to "svid" together with teams-api's INTERNAL_AUTH_MODE=svid;
         # then OPERATOR_CLIENT_SECRET + the teams-operator-sa client can be retired.
         - name: TEAMS_API_AUTH
-          value: "keycloak"
+          # A1 FLIP: present the teams-api-audience SVID to /internal/* (no
+          # Keycloak token). Flip together with teams-api's INTERNAL_AUTH_MODE=svid.
+          # Rollback: "keycloak".
+          value: "svid"
         - name: TEAMS_API_SVID_PATH
           value: "/operator-shared/teams-api-jwt"
         # Argo CD Project self-service reconciliation (see

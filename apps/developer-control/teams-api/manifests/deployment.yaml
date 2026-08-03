@@ -99,11 +99,16 @@ spec:
         # is unchanged in both modes. Flip to "svid" together with the operator's
         # TEAMS_API_AUTH=svid.
         - name: INTERNAL_AUTH_MODE
-          value: "keycloak"
+          # A1 FLIP: /internal/* now validates teams-operator's SPIRE JWT-SVID
+          # (no Keycloak). Flip together with the operator's TEAMS_API_AUTH=svid.
+          # Rollback: "keycloak".
+          value: "svid"
         - name: SPIRE_JWKS_URL
           value: "https://spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local/keys"
         - name: SPIRE_ISSUER
-          value: "https://spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local"
+          # The `iss` claim on the SVID (trust-domain OIDC issuer) — NOT the
+          # svc.cluster.local URL used to FETCH the keys above.
+          value: "https://oidc-discovery.platform.local"
         - name: OPERATOR_SPIFFE_ID
           value: "spiffe://platform.local/ns/engineering-platform/sa/teams-operator"
         - name: KC_ADMIN_CLIENT_SECRET
