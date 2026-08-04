@@ -71,14 +71,14 @@ sequenceDiagram
     Dev->>GK: create Pod, image@digest
     GK->>Ratify: verify this image (external data provider)
     Ratify->>Reg: pull signature + certificate + attestations
-    Ratify->>TUF: fetch Fulcio's root CA + Rekor's public key<br/>(cached, periodically refreshed — never hardcoded)
+    Ratify->>TUF: fetch the Fulcio root CA + Rekor public key<br/>(cached, periodically refreshed — never hardcoded)
     Ratify->>Ratify: check 1 — signature is cryptographically<br/>valid against the certificate
-    Ratify->>Ratify: check 2 — certificate chains to Fulcio's root CA
+    Ratify->>Ratify: check 2 — certificate chains to the Fulcio root CA
     Ratify->>Ratify: check 3 — cert identity ==<br/>github.com/org/app/.github/workflows/release.yml@refs/heads/main
     Note right of Ratify: TRUST CHECK 3 — this is the actual anchor.<br/>Any OTHER repo/workflow also has a valid Fulcio cert;<br/>only the PINNED identity is accepted
     Ratify->>Ratify: check 4 — issuer ext == token.actions.githubusercontent.com
     Ratify->>Rekor: verify the inclusion proof / SET
-    Note right of Ratify: TRUST CHECK 4 — proves signing happened<br/>inside the cert's real validity window
+    Note right of Ratify: TRUST CHECK 4 — proves signing happened<br/>while the certificate was still genuinely valid
     Ratify->>Ratify: check 5 — required attestations<br/>(SBOM · vuln · quality · SLSA) present
     Ratify-->>GK: verified ✓ / denied ✗ — any single failure denies
     GK-->>Dev: admit or reject
