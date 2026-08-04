@@ -34,13 +34,13 @@ sequenceDiagram
     GH-->>CI: signed JWT — sub=repo:org/app,<br/>workflow=release.yml, ref=refs/heads/main
     CI->>CI: generate an ephemeral keypair<br/>(in memory only, this run)
     CI->>Fulcio: present the OIDC JWT + ephemeral public key
-    Fulcio->>GH: fetch GitHub's JWKS,<br/>verify the JWT's signature, issuer, audience, expiry
+    Fulcio->>GH: fetch GitHub JWKS,<br/>verify the JWT signature, issuer, audience, expiry
     Note right of Fulcio: TRUST CHECK 1 — this is the ONLY place<br/>GitHub OIDC is actually validated
     Fulcio-->>CI: X.509 cert, ~10 min TTL —<br/>SAN = github.com/org/app/.github/workflows/release.yml@refs/heads/main<br/>issuer ext = token.actions.githubusercontent.com
     CI->>CI: sign the image digest with the ephemeral private key
     CI->>CI: discard the private key immediately
     CI->>Rekor: submit (signature, certificate, digest)
-    Rekor->>Rekor: independently verify the signature<br/>is valid for that cert's public key
+    Rekor->>Rekor: independently verify the signature<br/>is valid for that certificate public key
     Note right of Rekor: TRUST CHECK 2 — Rekor checks the MATH,<br/>never re-touches the OIDC token or GitHub at all
     Rekor-->>CI: Merkle inclusion proof +<br/>Signed Entry Timestamp (SET)
     CI->>Reg: push image + signature + cert +<br/>attestations (SBOM · vuln · quality · SLSA)
@@ -67,7 +67,7 @@ sequenceDiagram
     participant Rekor
     participant TUF as Sigstore TUF trust root
 
-    Note over Dev,TUF: VERIFICATION — the cert is long expired by now; Rekor is why that's fine
+    Note over Dev,TUF: VERIFICATION — the cert is long expired by now; Rekor is why that is fine
     Dev->>GK: create Pod, image@digest
     GK->>Ratify: verify this image (external data provider)
     Ratify->>Reg: pull signature + certificate + attestations
