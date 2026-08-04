@@ -12,7 +12,6 @@ namespace: engineering-platform
 resources:
   - deployment.yaml
   - rbac.yaml
-  - keycloak-operator-secret.yaml
 
 # Each generator's files become keys in its own ConfigMap — e.g.
 # teams-operator-quota-templates has data["critical.yaml"], etc. teams-

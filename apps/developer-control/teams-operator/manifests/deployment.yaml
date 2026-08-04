@@ -62,28 +62,14 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        # Authenticated identity for calling teams-api's /internal/*
-        # control-plane endpoints (client-credentials grant against the
-        # confidential teams-operator-sa Keycloak client) — see
-        # _teams_api_token in teams_operator.py and auth.require_operator in
-        # teams-api. Mirrors teams-api's own KC_ADMIN_CLIENT_SECRET pattern
-        # (keycloak-admin-secret.yaml there / keycloak-operator-secret.yaml
-        # here).
-        - name: OPERATOR_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: teams-operator-keycloak-secret
-              key: client-secret
-        # --- A1: how the operator authenticates to teams-api /internal/* ------
-        # "keycloak" (default) = the OPERATOR_CLIENT_SECRET token above.
-        # "svid" = present this pod's teams-api-audience JWT-SVID (written by the
-        # spiffe-helper sidecar to TEAMS_API_SVID_PATH) — no Keycloak, no static
-        # secret. Flip to "svid" together with teams-api's INTERNAL_AUTH_MODE=svid;
-        # then OPERATOR_CLIENT_SECRET + the teams-operator-sa client can be retired.
+        # --- How the operator authenticates to teams-api /internal/* ----------
+        # The operator presents this pod's teams-api-audience JWT-SVID (written
+        # by the spiffe-helper sidecar to TEAMS_API_SVID_PATH) as the bearer —
+        # no Keycloak, no static secret. teams-api validates it against SPIRE's
+        # JWKS (INTERNAL_AUTH_MODE=svid), pinning sub=this pod's SPIFFE ID. The
+        # old "keycloak" client-credentials path (teams-operator-sa) has been
+        # retired; this is the sole mechanism now.
         - name: TEAMS_API_AUTH
-          # A1 FLIP: present the teams-api-audience SVID to /internal/* (no
-          # Keycloak token). Flip together with teams-api's INTERNAL_AUTH_MODE=svid.
-          # Rollback: "keycloak".
           value: "svid"
         - name: TEAMS_API_SVID_PATH
           value: "/operator-shared/teams-api-jwt"

@@ -105,22 +105,6 @@
       "webOrigins": []
     },
     {
-      "clientId": "teams-operator-sa",
-      "name": "Teams Operator service account",
-      "description": "Confidential client for teams-operator to call teams-api's authenticated /internal/* endpoints (client-credentials grant). Unlike teams-api-sa, no realm-management roles - teams-operator never calls Keycloak's Admin API directly. DEMO secret.",
-      "enabled": true,
-      "protocol": "openid-connect",
-      "publicClient": false,
-      "clientAuthenticatorType": "client-secret",
-      "secret": "dev-teams-operator-sa-secret-change-me",
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "implicitFlowEnabled": false,
-      "serviceAccountsEnabled": true,
-      "redirectUris": [],
-      "webOrigins": []
-    },
-    {
       "clientId": "teams-operator-kc-admin",
       "name": "Teams Operator Keycloak admin",
       "description": "Confidential service-account client the teams-operator reconciler uses to WRITE realm state (k8s-access {ns}-viewer/-maintainer groups, project-<slug>-owner groups, and the project-manager realm role) - see reconcile_keycloak. Client-credentials grant; the secret is delivered to the operator from OpenBao via SPIFFE (kv/platform/keycloak-admin), not a static k8s Secret. Gated OFF by KC_RECONCILE_ENABLED until cutover. DEMO secret here must match the OpenBao copy.",
@@ -325,11 +309,6 @@
       "clientRoles": {
         "realm-management": ["view-realm", "view-users", "query-users", "query-groups"]
       }
-    },
-    {
-      "username": "service-account-teams-operator-sa",
-      "enabled": true,
-      "serviceAccountClientId": "teams-operator-sa"
     },
     {
       "username": "service-account-teams-operator-kc-admin",
