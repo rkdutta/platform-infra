@@ -91,6 +91,59 @@ running in this cluster and already issuing every pod an identity. The work
 described below is entirely about *consuming* that pre-existing identity:
 getting it into a pod, and getting OpenBao to trust it.
 
+## How SPIRE actually attests a workload (verified against live config)
+
+"SPIRE issues every pod an SVID" glosses over the part that makes it
+trustworthy: SPIRE never takes a workload's word for who it is. There are
+**two separate attestations, chained** — one that establishes trust in the
+*node* (really, in spire-agent), and one that establishes trust in *which
+specific pod* is asking, every single time.
+
+**1. Node attestation** — spire-agent → spire-server, once, when the agent
+starts. Live plugin config (`spire-server`'s `spire-server` ConfigMap and
+`spire-agent`'s `spire-agent` ConfigMap, both `NodeAttestor: k8s_psat`):
+
+```
+cluster: "platform-base"                       # this kind cluster's name
+audience: ["spire-server"]
+service_account_allow_list: ["spire-server:spire-agent"]
+```
+
+The spire-agent DaemonSet pod presents its own kubelet-projected
+ServiceAccount token (a PSAT — Projected Service Account Token, audience-
+scoped specifically to `spire-server`, not reusable elsewhere) to
+spire-server, which validates it via the k8s API's TokenReview endpoint.
+This proves "this is a genuine spire-agent pod, running on a real node, in
+this actual cluster" — it says nothing yet about any workload the agent will
+later vouch for.
+
+**2. Workload attestation** — spire-agent → the calling pod, on *every*
+Workload API call. Live plugin config (`spire-agent`, `WorkloadAttestor:
+k8s`):
+
+```
+skip_kubelet_verification: true
+use_new_container_locator: true
+```
+
+When a pod calls the Workload API socket asking "who am I," spire-agent
+does **not** ask the pod. It inspects the OS-level process/cgroup that
+actually made the call (`use_new_container_locator`) and maps that back to
+a specific container → pod → namespace/ServiceAccount. This is the real
+security boundary: a workload can't assert a SPIFFE ID, it can only *be
+where it physically is running* — the same reasoning behind the isolation
+guarantee described above (a pod can't construct a JWT-SVID claiming a
+different namespace).
+
+Those attested selectors (namespace, ServiceAccount) are matched against
+the cluster's `ClusterSPIFFEID` resources — the fallback rule described in
+[Core concepts](#core-concepts-briefly) — to template the SPIFFE ID as
+`spiffe://platform.local/ns/<namespace>/sa/<serviceaccount>`. Only
+**spire-server** ever holds the CA signing key; spire-agent forwards the
+attested selectors over its already-node-attested connection, and
+spire-server signs the resulting SVID. spire-agent itself never signs
+anything.
+
 ## The trust chain, end to end
 
 ```
@@ -144,6 +197,49 @@ Two things make this work that are easy to gloss over:
    The `sub` claim (`spiffe://platform.local/ns/team-jack-dev/sa/default`)
    is what SPIRE put there when it issued the SVID, based on the pod's real
    namespace/ServiceAccount — that's the actual security boundary.
+
+### What OpenBao's own config/role actually check (verified live)
+
+`bao read auth/jwt/config`:
+
+```
+oidc_discovery_url     https://spire-spiffe-oidc-discovery-provider.spire-server.svc.cluster.local
+oidc_discovery_ca_pem  <platform-tls CA>   # pins TLS trust for the JWKS fetch above
+status                 valid
+```
+
+`bao read auth/jwt/role/project-demo-go-default` (a real tenant-namespace
+role):
+
+```
+bound_audiences     [openbao]
+bound_claims        {sub: spiffe://platform.local/ns/project-demo-go-default/sa/*}
+bound_claims_type   glob
+token_policies      [project-demo-go-default-maintainer-policy]
+token_ttl           15m
+token_max_ttl       1h
+```
+
+So a login is: signature verified against the cached JWKS → `aud` must
+equal `openbao` → `sub` must glob-match this role's pattern → if all pass,
+mint an OpenBao token carrying that namespace's policy, short-lived (15m,
+renewable to a 1h ceiling — matching SPIRE's own `default_jwt_svid_ttl: 1h`,
+so a stolen token and a stolen SVID both go stale on a similar horizon).
+`teams-operator`'s own role (`teams-operator-admin`) follows the identical
+shape, just with `bound_claims: {sub:
+spiffe://platform.local/ns/engineering-platform/sa/teams-operator}` (exact
+match, not a glob — there's only ever one operator) and two policies
+(`teams-operator-admin-policy` for managing team roles/policies,
+`platform-operator-policy` for its own `kv/platform/*` reads).
+
+**The full chain reduces to one fact**: OpenBao trusts the `sub` claim
+purely because it trusts the signature, and it trusts the signature purely
+because it trusts the JWKS publisher (the OIDC discovery provider) — which
+only ever publishes keys for SVIDs that spire-server itself signed, and
+spire-server only signs a `sub` it computed itself from the two-stage node +
+workload attestation above, never from anything the caller supplied. See
+[How SPIRE actually attests a workload](#how-spire-actually-attests-a-workload-verified-against-live-config)
+for that half of the chain.
 
 ## Step by step: what happens when a tenant pod starts
 

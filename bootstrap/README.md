@@ -181,11 +181,20 @@ today — same class of manual-refresh caveat as `platform-tls` below).
 #    URL (the name is in the request body) - "create","update" only, no
 #    read/list/delete, keeps this to create-if-missing same as everything
 #    else the operator provisions.
-#    kv/metadata/project-* (read/list/delete) is for delete_openbao_access -
+#    kv/metadata/projects/* (read/list/delete) is for delete_openbao_access -
 #    recursively wiping a project's actual secret data when its namespace is
 #    deleted, alongside the policy/role/group cleanup above. No corresponding
 #    kv/data/* grant - metadata delete removes every version outright, so
-#    the operator never needs to touch the data path directly.
+#    the operator never needs to touch the data path directly. NOTE: this is
+#    "projects/*" (plural, matching the actual kv/data/projects/<slug>/...
+#    layered path layout in openbao-policy-templates/project-{owner,maintainer}.hcl)
+#    - NOT "project-*" (singular+hyphen, which matches policy/role/group NAMES
+#    like "project-<slug>-owner-policy" above but does not match the "projects/"
+#    KV path prefix at all, since Vault/OpenBao path globs are literal-prefix
+#    matches). Confirmed live: the running cluster's policy already has the
+#    plural form; this file previously had the singular form, which would have
+#    left delete_openbao_access silently unable to wipe real secret data on a
+#    fresh bootstrap.
 kubectl -n openbao exec -i openbao-0 -- sh -c \
   "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=$BAO_TOKEN bao policy write teams-operator-admin-policy -" <<'EOF'
 path "sys/policies/acl/project-*" {
@@ -203,7 +212,7 @@ path "identity/group-alias" {
 path "sys/auth" {
   capabilities = ["read"]
 }
-path "kv/metadata/project-*" {
+path "kv/metadata/projects/*" {
   capabilities = ["read", "list", "delete"]
 }
 EOF

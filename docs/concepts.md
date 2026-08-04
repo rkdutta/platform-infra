@@ -17,3 +17,8 @@ Doc vs. live-state diff found and fixed
 platform-infra/docs/keycloak-write-ownership-and-internal-auth.md already documents this split correctly at the architecture level (teams-api read-only, teams-operator sole writer — verified true), but it had one factual error: it twice claimed "the KC_WRITES_ENABLED flag is gone." It isn't — it's still in main.py, still an explicit env var on the teams-api Deployment, just pinned to "false" as a documented rollback lever. I corrected both spots in the doc to say it still exists but is inert.
 
 
+- Humans → Keycloak. Every human-facing login (teams-ui, teams-cli, OpenBao's own UI, Argo CD, Harbor) is OIDC against the teams realm.
+- Machines → JWT-SVIDs (SPIRE). teams-operator, and any tenant workload opted into openbao-access, prove identity with a SPIRE-issued JWT-SVID — no static credential.
+- Bootstrap-only → a raw OpenBao root token. Not SPIRE, not Keycloak — a Shamir-unseal-derived root token in bootstrap/init-keys.json, used only for the handful of one-time chicken-and-egg setup steps that have to happen before SPIRE-trust or OIDC exist yet (enabling the jwt/oidc auth methods themselves, writing the very first teams-operator-admin policy/role, seeding kv/platform/keycloak-admin). Nothing in steady-state runtime traffic uses it — it's deliberately kept out of any pod, never handed to a component, and is the thing your CLAUDE.md's "never revoke it as BAO_TOKEN" gotcha is about.
+
+So: humans → Keycloak, machines → JWT-SVIDs, plus a root token that only exists to bootstrap those two trust chains into existence — not a third steady-state path.
