@@ -15,6 +15,8 @@
 #   4. Harbor pull robot + secret      (namespace: engineering-platform)
 #      — NOT in `all`: needs Harbor's API LIVE, so run it LATER (after root-app
 #        has synced and Harbor is Healthy):  ./create-secrets.sh harbor-pull
+#   5. Ratify's own Harbor pull robot  (namespace: gatekeeper-system)
+#      — same reason, run LATER:  ./create-secrets.sh ratify-harbor-pull
 #
 # Secret VALUES live in git-ignored files (repo-credentials*.yaml,
 # harbor-replication/ghcr-credentials.yaml) and in a generated platform-tls
@@ -23,6 +25,7 @@
 # Usage:
 #   ./create-secrets.sh [all|repo-creds|tls|ghcr]      (default: all)
 #   ./create-secrets.sh harbor-pull                    (run after Harbor Healthy)
+#   ./create-secrets.sh ratify-harbor-pull              (run after Harbor Healthy)
 # =============================================================================
 set -euo pipefail
 
@@ -213,15 +216,91 @@ apply_harbor_pull() {
   ok "harbor-pull imagePullSecret in $HARBOR_PULL_NS"
 }
 
+# ---- 5. Ratify's own Harbor pull robot + imagePullSecret --------------------
+# Same "needs Harbor API live" constraint as step 4. Harbor's `platform`
+# project is private, so Ratify's own outbound registry calls (resolving
+# manifest/cosign-signature/attestation blobs for the K8sSupplyChainEvidence
+# constraint) need credentials too — not just kubelet's. Ratify's
+# oras.authProviders.k8secretsEnabled (apps/security/ratify/application.yaml)
+# resolves them from the calling ServiceAccount's (ratify-admin) own
+# imagePullSecrets, same mechanism kubelet uses. Without this, Ratify 401s
+# resolving every Harbor-hosted image before it ever gets to checking a
+# signature ("could not find credentials" / HEAD .../manifests/<tag>: 401 in
+# the ratify logs) — which reads exactly like "unsigned image" but isn't.
+# A separate robot from `harbor-pull` (narrower blast radius if leaked, and
+# each is independently revocable).
+RATIFY_HARBOR_PULL_NS="${RATIFY_HARBOR_PULL_NS:-gatekeeper-system}"
+
+apply_ratify_harbor_pull() {
+  log "Ratify Harbor pull robot + imagePullSecret (namespace: $RATIFY_HARBOR_PULL_NS)"
+  command -v jq >/dev/null || die "jq not found in PATH (needed to parse Harbor's robot response)"
+  ensure_ns "$RATIFY_HARBOR_PULL_NS"
+
+  local api="$HARBOR_URL/api/v2.0" auth="admin:$HARBOR_ADMIN_PASSWORD"
+
+  local i=0
+  until [ "$(curl -sk -o /dev/null -w '%{http_code}' -u "$auth" "$api/systeminfo" || true)" = "200" ]; do
+    i=$((i + 1))
+    [ "$i" -gt 30 ] && die "Harbor API not reachable at $api after 30 tries — is Harbor Synced & Healthy?"
+    skip "waiting for Harbor API ($i/30)…"; sleep 5
+  done
+  ok "Harbor API reachable"
+
+  local pid="" j=0
+  while [ -z "$pid" ]; do
+    pid=$(curl -sk -u "$auth" "$api/projects?name=platform" | jq -r '.[0].project_id // empty')
+    [ -n "$pid" ] && break
+    j=$((j + 1))
+    [ "$j" -gt 60 ] && die "Harbor 'platform' project not found after 5m — has GHCR replication run yet? (check the harbor-replication job)"
+    skip "waiting for Harbor 'platform' project ($j/60)…"; sleep 5
+  done
+
+  # Same not-readable-after-creation constraint as step 4: delete+recreate.
+  local existing_id
+  existing_id=$(curl -sk -u "$auth" -G "$api/robots" \
+    --data-urlencode "q=Level=project,ProjectID=$pid" --data "page_size=100" 2>/dev/null \
+    | jq -r '.[] | select(.name=="robot$platform+ratify-pull") | .id' | head -1 || true)
+  if [ -n "$existing_id" ]; then
+    curl -sk -u "$auth" -X DELETE "$api/robots/$existing_id" >/dev/null || true
+    skip "deleted stale robot id=$existing_id (its secret can't be re-read)"
+  fi
+
+  local resp rname rsecret
+  resp=$(curl -sk -u "$auth" -X POST "$api/robots" -H 'Content-Type: application/json' -d '{
+    "name":"ratify-pull","duration":-1,"level":"project",
+    "permissions":[{"kind":"project","namespace":"platform",
+      "access":[{"resource":"repository","action":"pull"}]}]}')
+  rname=$(echo "$resp" | jq -r '.name // empty')
+  rsecret=$(echo "$resp" | jq -r '.secret // empty')
+  [ -n "$rname" ] && [ -n "$rsecret" ] \
+    || die "robot creation failed: $(echo "$resp" | jq -c '{errors}' 2>/dev/null || echo "$resp")"
+  ok "robot $rname created"
+
+  kubectl -n "$RATIFY_HARBOR_PULL_NS" create secret docker-registry ratify-harbor-pull \
+    --docker-server=harbor.127.0.0.1.sslip.io \
+    --docker-username="$rname" \
+    --docker-password="$rsecret" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  ok "ratify-harbor-pull imagePullSecret in $RATIFY_HARBOR_PULL_NS"
+
+  # Attach it to the ServiceAccount Ratify's Deployment actually runs as.
+  # Strategic-merge on imagePullSecrets replaces the list wholesale (it has no
+  # patchMergeKey), which is fine here — safe to rerun.
+  kubectl -n "$RATIFY_HARBOR_PULL_NS" patch sa ratify-admin \
+    -p '{"imagePullSecrets":[{"name":"ratify-harbor-pull"}]}' >/dev/null
+  ok "ratify-admin ServiceAccount now references ratify-harbor-pull"
+}
+
 main() {
   require_cluster
   case "${1:-all}" in
-    all)         apply_repo_creds; apply_platform_tls; apply_ghcr ;;
-    repo-creds)  apply_repo_creds ;;
-    tls)         apply_platform_tls ;;
-    ghcr)        apply_ghcr ;;
-    harbor-pull) apply_harbor_pull ;;
-    *)           die "unknown target '$1' (use: all | repo-creds | tls | ghcr | harbor-pull)" ;;
+    all)                 apply_repo_creds; apply_platform_tls; apply_ghcr ;;
+    repo-creds)          apply_repo_creds ;;
+    tls)                 apply_platform_tls ;;
+    ghcr)                apply_ghcr ;;
+    harbor-pull)         apply_harbor_pull ;;
+    ratify-harbor-pull)  apply_ratify_harbor_pull ;;
+    *)                   die "unknown target '$1' (use: all | repo-creds | tls | ghcr | harbor-pull | ratify-harbor-pull)" ;;
   esac
   log "Done."
 }
