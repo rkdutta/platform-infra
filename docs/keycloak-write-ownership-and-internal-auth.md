@@ -69,8 +69,14 @@ Relevant env (`apps/developer-control/teams-api/manifests/deployment.yaml`):
 | `OPERATOR_SPIFFE_ID` | `spiffe://platform.local/ns/engineering-platform/sa/teams-operator` | The only `sub` accepted on `/internal/*`. |
 | `KC_ADMIN_CLIENT_ID` | `teams-api-sa` | The **read-only** directory client. |
 
-There is no `KC_WRITES_ENABLED` in the steady state; `teams-api` has no
-Keycloak write path to gate. (The flag existed only during the cutover.)
+`KC_WRITES_ENABLED` still exists in `teams-api` (`main.py`) and is still an
+explicit env on the Deployment — pinned to `"false"`. It was **not** removed;
+the write methods it gates (`keycloak_admin.py`'s `ensure_group`,
+`delete_group`, `assign_realm_role`, `remove_realm_role`,
+`add_user_to_group`, `remove_user_from_group`) are all still present in code,
+just dead in practice while the flag is off. Kept as the documented rollback
+lever back to dual-write, same as `INTERNAL_AUTH_MODE`/`TEAMS_API_AUTH`/
+`KC_RECONCILE_ENABLED` below.
 
 ### `teams-operator` (sole Keycloak writer, SVID caller)
 
@@ -173,7 +179,8 @@ working at every step:
 4. **Retirement** — `teams-operator-sa` (client, secret, env) removed, since
    nothing honored or presented it anymore.
 
-The `KC_WRITES_ENABLED` flag is gone; `KC_RECONCILE_ENABLED` /
-`INTERNAL_AUTH_MODE` / `TEAMS_API_AUTH` remain as env in the manifests at their
-steady-state values (they still gate the code paths, and pinning them
-explicitly documents intent and keeps a rollback lever if ever needed).
+`KC_WRITES_ENABLED`, `KC_RECONCILE_ENABLED`, `INTERNAL_AUTH_MODE`, and
+`TEAMS_API_AUTH` all remain as explicit env in the manifests at their
+steady-state values — none were deleted from code or manifests. They still
+gate the code paths; pinning them explicitly documents intent and keeps a
+rollback lever if ever needed.
