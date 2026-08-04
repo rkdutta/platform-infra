@@ -22,6 +22,30 @@ history for `apps/security/tenant-guardrails`'s `openbao-*.yaml` and
 `apps/developer-control/teams-operator`'s `openbao-*-templates/` — this doc
 is about *how it works*, not why it was designed this way.
 
+## Every component that talks to OpenBao
+
+Verified against live manifests/source, 2026-08-04 — not every platform
+component reaches OpenBao, and two components that look like they might
+(`teams-api`, `teams-app`) deliberately don't:
+
+| Component | Auth mechanism | What it does | Verified in |
+|---|---|---|---|
+| **teams-operator** | SPIRE JWT-SVID (`openbao` audience) → OpenBao `jwt` auth, privileged role `teams-operator-admin` | Sole admin writer: creates/deletes per-namespace ACL policies, JWT auth roles, the `openbao-agent-config` ConfigMaps, the KV secret tree itself, and the identity-group-aliases backing human OIDC access (`ensure_openbao_access`/`delete_openbao_access` in `teams_operator.py`) | `apps/developer-control/teams-operator/manifests/deployment.yaml` (`OPENBAO_ADDR`, `OPENBAO_JWT_PATH`, `OPENBAO_ROLE=teams-operator-admin`) — see [teams-operator's own access](#teams-operators-own-access-the-same-pattern-one-level-up) |
+| **Tenant workload pods** (any app in a project namespace, opt-in via label) | SPIRE JWT-SVID (`openbao` audience) → OpenBao `jwt` auth → per-namespace `team-<ns>-policy` (maintainer-equivalent, scoped to that namespace's KV path only) | Read/write their own namespace's KV secrets through a local `openbao-agent` sidecar proxy (`127.0.0.1:8207`) — the app container itself is unmodified and holds no OpenBao credential | `apps/security/tenant-guardrails/manifests/openbao-sidecar-{deployment,rollout}.yaml`, `openbao-spiffe-volume-{deployment,rollout}.yaml` (Gatekeeper `Assign` mutations, gated on the `platform.example.com/openbao-access: "true"` label) |
+| **Humans** (any Keycloak user, via browser) | OpenBao's own OIDC login against Keycloak — a `groups` claim maps to an OpenBao identity-group-alias bound to `{namespace}-viewer`/`-maintainer` or a project-owner policy | Log directly into OpenBao's UI to browse/create secrets; completely bypasses `teams-api`/`teams-app` as an intermediary | This doc's own OIDC-group-alias mechanism + `bootstrap/README.md`'s OpenBao OIDC section; `teams-app`'s "Secrets" button is only a browser deep-link (`environment.ts`'s `openbaoUrl`) — the SPA makes no backend call to OpenBao itself |
+| **openbao-unseal watcher** | None — in-cluster only, reads Shamir unseal keys from a k8s Secret (`openbao-unseal-keys`) | Polls OpenBao's seal status and auto-submits the threshold unseal keys after every pod restart (Shamir seal, not KMS auto-unseal — see the root `CLAUDE.md`'s "Pending" section) | `apps/security/openbao/manifests/unseal-watcher.yaml` |
+
+**Deliberately does *not* talk to OpenBao directly**: `teams-api` and
+`teams-app`. Grepping both confirms it — every "openbao" hit in `teams-api`
+(`main.py`, `store.py`, `events_reader.py`, `provisioning_status.py`) is
+either a comment describing what `teams-operator` does, the code that
+mirrors project-owner *Keycloak* group membership (so OpenBao's group-alias
+resolves correctly on the operator's next reconcile), or reading back
+provisioning *status* that `teams-operator` already wrote as k8s Events —
+never an HTTP call to OpenBao's API. `teams-api`'s Deployment has no
+`OPENBAO_ADDR` env at all. `teams-app`'s hits are all the one deep-link URL
+above.
+
 ## Core concepts, briefly
 
 **SPIFFE** (Secure Production Identity Framework For Everyone) is a
