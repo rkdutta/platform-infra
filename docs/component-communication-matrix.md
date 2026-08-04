@@ -132,33 +132,33 @@ flowchart TB
 
     App -->|OIDC PKCE| KC
     CLI -->|OIDC PKCE loopback| KC
-    App -->|bearer token| API
-    CLI -->|bearer token| API
+    App -->|bearer token · CRUD| API
+    CLI -->|bearer token · CRUD| API
     App -->|OIDC| Argo
-    App -->|OIDC SSO| Bao
+    App -->|OIDC SSO · secret CRUD| Bao
     App -->|OIDC| Harbor
 
     API -->|writes| DB
-    API -.->|read-only, teams-api-sa| KC
-    API -.->|read-only, native SA| K8s
+    API -->|read-only, teams-api-sa| KC
+    API -->|read-only, native SA| K8s
     API -.->|never calls, by design| Bao
     API -.->|never exchanges the code| GH
 
     DB -.->|polled every ~15-30s| OP
 
-    OP ==>|SVID aud=teams-api| API
-    OP ==>|admin client via OpenBao| KC
-    OP ==>|SVID aud=openbao| Bao
+    OP ==>|SVID aud=teams-api · fetch + resolve| API
+    OP ==>|admin client via OpenBao · writes| KC
+    OP ==>|SVID aud=openbao · secret CRUD| Bao
     OP ==>|native SA, writes| K8s
-    OP ==>|App JWT / install token| GH
+    OP ==>|App JWT / install token · resolve + exchange| GH
 
-    SPIRE -.->|attests| K8s
+    SPIRE -->|attests| K8s
     SPIRE ==>|issues SVID| OP
     SPIRE ==>|issues SVID| Pod
-    Pod ==>|SVID aud=openbao| Bao
+    Pod ==>|SVID aud=openbao · secret CRUD| Bao
 
     K8s -->|pulls images| Harbor
-    Argo -->|installation token| GH
+    Argo -->|installation token · clones| GH
 
     classDef human fill:#EEF2FF,stroke:#C7D2FE,color:#1E1B4B;
     classDef control fill:#F8FAFC,stroke:#E2E8F0,color:#0F172A;
@@ -171,11 +171,30 @@ flowchart TB
     class KC,Bao,SPIRE security;
     class K8s,Argo,Harbor resource;
     class GH,Pod ext;
+
+    %% edge index map (0-based, in strict source order — blank lines don't count):
+    %% 0 Dev->App, 1 Dev->CLI, 2 App->KC, 3 CLI->KC, 4 App->API, 5 CLI->API,
+    %% 6 App->Argo, 7 App->Bao, 8 App->Harbor, 9 API->DB, 10 API->KC, 11 API->K8s,
+    %% 12 API->Bao(absent), 13 API->GH(absent), 14 DB->OP, 15 OP->API, 16 OP->KC,
+    %% 17 OP->Bao, 18 OP->K8s, 19 OP->GH, 20 SPIRE->K8s, 21 SPIRE->OP, 22 SPIRE->Pod,
+    %% 23 Pod->Bao, 24 K8s->Harbor, 25 Argo->GH
+    linkStyle 0,1,14 stroke:#94A3B8,stroke-width:1.5px,color:#94A3B8;
+    linkStyle 2,3,6,8,10,11,20,21,22,24,25 stroke:#2563EB,stroke-width:2px,color:#2563EB;
+    linkStyle 9,16,18 stroke:#EA580C,stroke-width:2px,color:#EA580C;
+    linkStyle 4,5,7,15,17,19,23 stroke:#7C3AED,stroke-width:2.5px,color:#7C3AED;
+    linkStyle 12,13 stroke:#CBD5E1,stroke-width:1.5px,stroke-dasharray: 4 3,color:#CBD5E1;
 ```
 
-`==>` marks the "operator does the rest" fan-out (§3 above); `-->` marks
-ordinary calls; `-.->` marks read-only calls or edges that are labeled as
-explicitly absent.
+**Edge color is the permission direction**, independent of arrow weight
+(`==>` still marks the "operator does the rest" fan-out from §3, and plain
+`-->` vs `-.->` still marks an ordinary call vs an indirect/absent one):
+
+| Color | Meaning |
+|---|---|
+| 🔵 blue | read-only |
+| 🟠 orange | write-only |
+| 🟣 violet | read/write (both directions happen over that edge) |
+| ⚪ gray | not a data-access edge — either structural (a human opening a client) or explicitly absent |
 
 ## Where things live
 
