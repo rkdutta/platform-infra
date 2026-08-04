@@ -172,7 +172,7 @@ flowchart TB
     class K8s,Argo,Harbor resource;
     class GH,Pod ext;
 
-    %% edge index map (0-based, in strict source order — blank lines don't count):
+    %% edge index map (0-based, in strict source order — blank lines are not counted):
     %% 0 Dev->App, 1 Dev->CLI, 2 App->KC, 3 CLI->KC, 4 App->API, 5 CLI->API,
     %% 6 App->Argo, 7 App->Bao, 8 App->Harbor, 9 API->DB, 10 API->KC, 11 API->K8s,
     %% 12 API->Bao(absent), 13 API->GH(absent), 14 DB->OP, 15 OP->API, 16 OP->KC,
