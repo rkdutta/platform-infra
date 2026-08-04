@@ -178,11 +178,11 @@ flowchart TB
     %% 12 API->Bao(absent), 13 API->GH(absent), 14 DB->OP, 15 OP->API, 16 OP->KC,
     %% 17 OP->Bao, 18 OP->K8s, 19 OP->GH, 20 SPIRE->K8s, 21 SPIRE->OP, 22 SPIRE->Pod,
     %% 23 Pod->Bao, 24 K8s->Harbor, 25 Argo->GH
-    linkStyle 0,1,14 stroke:#94A3B8,stroke-width:1.5px,color:#94A3B8;
-    linkStyle 2,3,6,8,10,11,20,21,22,24,25 stroke:#2563EB,stroke-width:2px,color:#2563EB;
-    linkStyle 9,16,18 stroke:#EA580C,stroke-width:2px,color:#EA580C;
-    linkStyle 4,5,7,15,17,19,23 stroke:#7C3AED,stroke-width:2.5px,color:#7C3AED;
-    linkStyle 12,13 stroke:#CBD5E1,stroke-width:1.5px,stroke-dasharray: 4 3,color:#CBD5E1;
+    linkStyle 0,1,14 stroke:#94A3B8,stroke-width:1px
+    linkStyle 2,3,6,8,10,11,20,21,22,24,25 stroke:#2563EB,stroke-width:2px
+    linkStyle 9,16,18 stroke:#EA580C,stroke-width:2px
+    linkStyle 4,5,7,15,17,19,23 stroke:#7C3AED,stroke-width:2px
+    linkStyle 12,13 stroke:#CBD5E1,stroke-width:1px,stroke-dasharray:4,3
 ```
 
 **Edge color is the permission direction**, independent of arrow weight
