@@ -29,7 +29,6 @@ sequenceDiagram
     participant Rekor
     participant Reg as Harbor (registry)
 
-    rect rgb(236, 253, 245)
     Note over CI,Reg: SIGNING — no COSIGN_KEY anywhere; the private key exists for seconds
     CI->>GH: request an ID token (aud=sigstore)
     GH-->>CI: signed JWT — sub=repo:org/app,<br/>workflow=release.yml, ref=refs/heads/main
@@ -45,7 +44,6 @@ sequenceDiagram
     Note right of Rekor: TRUST CHECK 2 — Rekor checks the MATH,<br/>never re-touches the OIDC token or GitHub at all
     Rekor-->>CI: Merkle inclusion proof +<br/>Signed Entry Timestamp (SET)
     CI->>Reg: push image + signature + cert +<br/>attestations (SBOM · vuln · quality · SLSA)
-    end
 ```
 
 Why Rekor matters even though it doesn't check identity: the Fulcio
@@ -69,7 +67,6 @@ sequenceDiagram
     participant Rekor
     participant TUF as Sigstore TUF trust root
 
-    rect rgb(239, 246, 255)
     Note over Dev,TUF: VERIFICATION — the cert is long expired by now; Rekor is why that's fine
     Dev->>GK: create Pod, image@digest
     GK->>Ratify: verify this image (external data provider)
@@ -85,7 +82,6 @@ sequenceDiagram
     Ratify->>Ratify: check 5 — required attestations<br/>(SBOM · vuln · quality · SLSA) present
     Ratify-->>GK: verified ✓ / denied ✗ — any single failure denies
     GK-->>Dev: admit or reject
-    end
 ```
 
 ## Who actually verifies what
