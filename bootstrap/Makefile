@@ -14,7 +14,7 @@ TEAMS_NS      ?= engineering-platform
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
-		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-19s\033[0m %s\n", $$1, $$2}'
 
 # ── platform-base (Terraform: kind cluster, Argo CD, platform-tls, node-hosts) ──
 init: ## terraform init (platform-base)
