@@ -20,3 +20,11 @@ kubectl -n openbao create secret generic openbao-unseal-keys \
   --from-literal=UNSEAL_KEY_1="$(jq -r '.unseal_keys_b64[0]' init-keys.json)" \
   --from-literal=UNSEAL_KEY_2="$(jq -r '.unseal_keys_b64[1]' init-keys.json)" \
   --from-literal=UNSEAL_KEY_3="$(jq -r '.unseal_keys_b64[2]' init-keys.json)"
+
+# The GitOps-managed openbao-unseal watcher Deployment reads this Secret via
+# envFrom, which is only evaluated at container start — if Argo CD scheduled
+# that pod before this Secret existed (likely, on a fresh bootstrap), it's
+# stuck in CreateContainerConfigError with stale (missing) env vars. Restart
+# it now so it picks up the Secret we just created; no-op (prints "No
+# resources found") if the pod isn't up yet or already picked it up.
+kubectl delete pod -n openbao -l app.kubernetes.io/name=openbao-unseal --ignore-not-found

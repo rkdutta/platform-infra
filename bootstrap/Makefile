@@ -10,7 +10,7 @@ OPENBAO_NS    ?= openbao
 TEAMS_NS      ?= engineering-platform
 
 .DEFAULT_GOAL := help
-.PHONY: help init apply destroy check-apiserver secrets projects deploy-root-app openbao openbao-kv openbao-sso openbao-jwt openbao-access harbor-pull teams-api-access bootstrap
+.PHONY: help init apply destroy check-apiserver secrets projects deploy-root-app openbao openbao-kv openbao-sso openbao-jwt openbao-access harbor-pull ratify-harbor-pull harbor-sso teams-api-access bootstrap
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -83,6 +83,12 @@ openbao-access: ## Full post-recreate OpenBao runtime bootstrap (kv mount + huma
 harbor-pull: check-apiserver ## Create the Harbor pull robot + imagePullSecret (needs Harbor Healthy; waits for it)
 	./create-secrets.sh harbor-pull
 
+ratify-harbor-pull: check-apiserver ## Create Ratify's own Harbor pull robot + imagePullSecret (needs Harbor Healthy; waits for it) — without this Ratify 401s resolving Harbor images (looks like "unsigned image" but isn't)
+	./create-secrets.sh ratify-harbor-pull
+
+harbor-sso: check-apiserver ## Enable Harbor OIDC login via Keycloak (idempotent; needs Harbor Healthy — waits on its rollout)
+	./enable-oidc-sso.sh harbor
+
 teams-api-access: check-apiserver ## (Re)create teams-api-k8s-access ConfigMap (apiserver URL + CA for GET /kubeconfig; wiped by cluster recreate)
 	TEAMS_NS=$(TEAMS_NS) ./teams-api-access.sh
 
@@ -93,5 +99,7 @@ bootstrap: ## Bootstrap the cluster (platform-base + platform-infra)
 	$(MAKE) deploy-root-app
 	$(MAKE) openbao
 	$(MAKE) harbor-pull
+	$(MAKE) ratify-harbor-pull
+	$(MAKE) harbor-sso
 	$(MAKE) openbao-access
 	$(MAKE) teams-api-access
