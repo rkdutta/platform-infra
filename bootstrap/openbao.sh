@@ -1,3 +1,10 @@
+#!/usr/bin/env bash
+# One-time OpenBao init + unseal (see bootstrap/README.md's "OpenBao — one-time
+# init" section). Run from bootstrap/ (writes init-keys.json there); invoked by
+# `make openbao`, which guards against re-running this against an
+# already-initialized OpenBao.
+set -euo pipefail
+
 kubectl -n openbao exec openbao-0 -- sh -c \
   'BAO_ADDR=http://127.0.0.1:8200 bao operator init -key-shares=5 -key-threshold=3 -format=json' \
   > init-keys.json   # already git-ignored (init-keys.json*)

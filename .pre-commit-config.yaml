@@ -1,0 +1,30 @@
+# Pre-commit hooks: catch formatting, obvious mistakes, secrets, and this
+# repo's own unit tests BEFORE they reach a `make bootstrap` run. Install once
+# with `pre-commit install`. E2E tests (need a live cluster, and the
+# project-lifecycle test mutates it) are NOT run here — see tests/e2e/, on
+# demand via the capstone-level /test-all command.
+#
+# Rev fields are pinned tags; `pre-commit autoupdate` (or Renovate) bumps them.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: platform-infra-unit-tests
+        name: platform-infra unit tests
+        entry: tests/unit/run.sh
+        language: system
+        pass_filenames: false

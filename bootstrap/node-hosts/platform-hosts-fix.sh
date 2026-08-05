@@ -21,13 +21,15 @@ add() {  # add <ip> <name>
   fi
 }
 
-# Keycloak issuer is on :8443, which exists only as a HOST-level docker port
-# map (host:8443 -> node:443); host.docker.internal reaches it. Resolved fresh
-# at boot so it survives host IP changes.
-add "$(getent hosts host.docker.internal | awk '{print $1}')" platform-auth.127.0.0.1.sslip.io
-
-# Harbor registry -> in-cluster ingress, via the ingress-nginx ClusterIP. This
-# value is PINNED in platform-infra apps/resource/ingress-nginx/application.yaml
-# (controller.service.clusterIP), so it stays constant across cluster recreation
-# and this hardcoded value stays correct. Keep the two in sync.
-add "10.96.209.177" harbor.127.0.0.1.sslip.io
+# Both Keycloak and Harbor are reached FROM THE NODE via host.docker.internal,
+# which forwards to the host-level docker port maps back to the ingress:
+#   - Keycloak issuer is on :8443 (host:8443 -> node:443).
+#   - Harbor: containerd pulls on :443 (host:443 -> node:443) and then follows
+#     Harbor's token realm to :8443 (host:8443 -> node:443). BOTH host ports
+#     map to the ingress (see platform-base main.tf extra_port_mappings), so a
+#     single host.docker.internal route serves both the pull and the token
+#     fetch — which the in-cluster ClusterIP (443 only) could not.
+# Resolved fresh at boot so it survives host IP changes.
+DOCKER_HOST_IP="$(getent hosts host.docker.internal | awk '{print $1}')"
+add "$DOCKER_HOST_IP" platform-auth.127.0.0.1.sslip.io
+add "$DOCKER_HOST_IP" harbor.127.0.0.1.sslip.io

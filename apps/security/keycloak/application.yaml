@@ -227,6 +227,22 @@ spec:
                       "webOrigins": []
                     },
                     {
+                      "clientId": "teams-e2e-tests",
+                      "name": "E2E test runner",
+                      "description": "Password-grant client used ONLY by the local test-suites (platform-infra/tests, teams-api/teams-cli/teams-app e2e) to obtain a demo user's token directly, instead of driving a real browser login. Not used by any production code path - teams-cli/teams-ui deliberately do NOT have directAccessGrantsEnabled. DEMO secret, rotate or remove if this stops being test-only.",
+                      "enabled": true,
+                      "protocol": "openid-connect",
+                      "publicClient": false,
+                      "clientAuthenticatorType": "client-secret",
+                      "secret": "dev-teams-e2e-tests-secret-change-me",
+                      "standardFlowEnabled": false,
+                      "directAccessGrantsEnabled": true,
+                      "implicitFlowEnabled": false,
+                      "serviceAccountsEnabled": false,
+                      "redirectUris": [],
+                      "webOrigins": []
+                    },
+                    {
                       "clientId": "argocd",
                       "name": "Argo CD",
                       "description": "Argo CD's native OIDC login (see platform-base/argocd.tf). clientSecret must match var.argocd_oidc_client_secret there - kept in sync by hand. DEMO secret, rotate for real use.",
